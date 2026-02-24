@@ -48,7 +48,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow FlashRide to use your location to share with ride participants."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
