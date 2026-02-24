@@ -1,10 +1,6 @@
 import { create } from 'zustand';
-
-interface Session {
-  user_id: string;
-  email: string;
-  access_token: string;
-}
+import { supabase } from '../lib/supabase';
+import type { Session as SupabaseSession } from '@supabase/supabase-js';
 
 interface Profile {
   id: string;
@@ -16,17 +12,18 @@ interface Profile {
 }
 
 interface AuthState {
-  session: Session | null;
+  session: SupabaseSession | null;
   profile: Profile | null;
   loading: boolean;
-  setSession: (session: Session | null) => void;
+  setSession: (session: SupabaseSession | null) => void;
   setProfile: (profile: Profile | null) => void;
   setLoading: (loading: boolean) => void;
   initialize: () => Promise<void>;
-  logout: () => void;
+  fetchProfile: (userId: string) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   profile: null,
   loading: true,
@@ -36,11 +33,51 @@ export const useAuthStore = create<AuthState>((set) => ({
   setLoading: (loading) => set({ loading }),
 
   initialize: async () => {
-    // Will implement session restoration from storage in Step 2
-    set({ loading: false });
+    try {
+      // Get current session from Supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        set({ session });
+        // Fetch user profile
+        await get().fetchProfile(session.user.id);
+      }
+
+      // Listen for auth changes
+      supabase.auth.onAuthStateChange((_event, session) => {
+        set({ session });
+        if (session) {
+          get().fetchProfile(session.user.id);
+        } else {
+          set({ profile: null });
+        }
+      });
+    } catch (error) {
+      console.error('Auth initialization error:', error);
+    } finally {
+      set({ loading: false });
+    }
   },
 
-  logout: () => {
+  fetchProfile: async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        set({ profile: data });
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    }
+  },
+
+  logout: async () => {
+    await supabase.auth.signOut();
     set({ session: null, profile: null });
   },
 }));

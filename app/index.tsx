@@ -13,9 +13,7 @@ export default function Index() {
     );
   }
 
-  if (session) {
-    return <Redirect href="/(app)/home" />;
-  }
-
-  return <Redirect href="/(auth)/login" />;
+  // For Step 2 testing, always go to session-viewer
+  // In Step 3, we'll change this to check session first
+  return <Redirect href="/(app)/session-viewer" />;
 }

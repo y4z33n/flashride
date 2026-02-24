@@ -40,25 +40,23 @@ Then:
 ### Current Status
 
 **✅ Step 1 COMPLETE** - Repo + Expo app scaffold
+**✅ Step 2 COMPLETE** - Supabase project + connection
 
-#### Deliverables Completed:
-- ✅ Git repository initialized
-- ✅ Expo app with TypeScript created
-- ✅ Expo Router installed with route groups:
-  - `/(auth)` → login, otp, profile-setup
-  - `/(app)` → tabs: Home, Search, OfferRide, Inbox, Profile
-- ✅ Zustand stores created:
-  - `authStore` - session, user, auth state
-  - `rideStore` - rides, requests
-  - `uiStore` - loading, errors, toasts
+#### Step 2 Deliverables Completed:
+- ✅ Supabase client installed and configured
+- ✅ Environment variables set (.env file)
+- ✅ Supabase client with secure session persistence (AsyncStorage)
+- ✅ AuthStore updated to use Supabase auth
+- ✅ Session viewer screen created for testing
+- ✅ Auto session restoration on app reload
 
-#### How to Test Step 1:
-1. Run `npm start`
-2. Open app on device/simulator
-3. Verify navigation works:
-   - Should see Login screen (placeholder)
-   - After login (Step 3), will navigate to Home tab
-4. Test tab navigation between all 5 tabs (currently placeholders)
+#### How to Test Step 2:
+1. Run `npm start` and reload app
+2. Navigate to **Session** tab (first tab)
+3. Click "Test Supabase Connection" button
+4. Should see: ✅ Connected to Supabase! (or error message)
+5. Check Environment Variables section shows ✅ Set for both vars
+6. Session and Profile will show ❌ (auth not implemented yet - that's Step 3)
 
 #### Next Steps:
 - **Step 2**: Supabase project setup + connection
@@ -91,11 +89,15 @@ flashride/
 └── assets/               # Images, fonts
 ```
 
-## Environment Variables (Step 2)
+## Environment Variables
 
-Will need:
+Create a `.env` file in the root directory:
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://ixjpeduqymfxdxsflfik.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
+EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY
 ```
-EXPO_PUBLIC_SUPABASE_URL=
-EXPO_PUBLIC_SUPABASE_ANON_KEY=
-EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=
-```
+
+**✅ Supabase credentials configured**
+**⏳ Google Maps API key needed for Step 5**

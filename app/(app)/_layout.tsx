@@ -10,6 +10,15 @@ export default function AppLayout() {
       }}
     >
       <Tabs.Screen
+        name="session-viewer"
+        options={{
+          title: 'Session',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="pulse" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="home"
         options={{
           title: 'Home',
