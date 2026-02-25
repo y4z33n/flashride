@@ -1,14 +1,18 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 
-interface Profile {
+export interface Profile {
   id: string;
   email: string;
   full_name: string;
   phone: string;
   avatar_url?: string;
+  is_driver: boolean;
+  rating_avg: number;
+  rating_count: number;
   created_at: string;
+  updated_at: string;
 }
 
 interface AuthState {
@@ -34,16 +38,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: async () => {
     try {
-      // Get current session from Supabase
       const { data: { session } } = await supabase.auth.getSession();
-      
       if (session) {
         set({ session });
-        // Fetch user profile
         await get().fetchProfile(session.user.id);
       }
 
-      // Listen for auth changes
       supabase.auth.onAuthStateChange((_event, session) => {
         set({ session });
         if (session) {
@@ -66,9 +66,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .select('*')
         .eq('id', userId)
         .single();
-
-      if (error) throw error;
-      if (data) {
+      if (!error && data) {
         set({ profile: data });
       }
     } catch (error) {

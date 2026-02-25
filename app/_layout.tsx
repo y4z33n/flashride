@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+﻿import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuthStore } from '../store/authStore';
@@ -11,7 +11,6 @@ export default function RootLayout() {
     initialize().finally(() => setReady(true));
   }, []);
 
-  // Block all rendering until Supabase is initialized
   if (!ready) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
@@ -27,4 +26,3 @@ export default function RootLayout() {
     </Stack>
   );
 }
-

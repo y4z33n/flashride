@@ -1,6 +1,14 @@
-import { Redirect } from 'expo-router';
+﻿import { Redirect } from 'expo-router';
+import { useAuthStore } from '../../store/authStore';
 
-// Default route for (app) group — always land on session-viewer for Step 2 testing
 export default function AppIndex() {
-  return <Redirect href="/(app)/session-viewer" />;
+  const { session, profile } = useAuthStore();
+
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
+  }
+  if (!profile) {
+    return <Redirect href="/(auth)/profile-setup" />;
+  }
+  return <Redirect href="/(app)/home" />;
 }
