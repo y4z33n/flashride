@@ -3,17 +3,17 @@ import { useAuthStore } from '../store/authStore';
 import { ActivityIndicator, View } from 'react-native';
 
 export default function Index() {
-  const { session, loading } = useAuthStore();
+  const { loading } = useAuthStore();
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <ActivityIndicator size="large" color="#007AFF" />
       </View>
     );
   }
 
-  // For Step 2 testing, always go to session-viewer
-  // In Step 3, we'll change this to check session first
+  // Step 2: Always go to session-viewer for testing
+  // Step 3 will replace this with proper auth-gated routing
   return <Redirect href="/(app)/session-viewer" />;
 }

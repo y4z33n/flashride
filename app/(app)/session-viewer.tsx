@@ -11,7 +11,8 @@ export default function SessionViewerScreen() {
   const testConnection = async () => {
     setConnectionStatus('Testing...');
     try {
-      const { data, error } = await supabase.from('profiles').select('count');
+      // Test connection with a simple auth ping instead of querying a table
+      const { data, error } = await supabase.auth.getSession();
       if (error) {
         setConnectionStatus(`❌ Error: ${error.message}`);
       } else {
