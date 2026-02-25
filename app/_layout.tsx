@@ -3,9 +3,11 @@ import { useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
 
 export default function RootLayout() {
-  const { initialize } = useAuthStore();
+  const { initialize, setLoading } = useAuthStore();
 
   useEffect(() => {
+    // Ensure loading is true while we initialize
+    setLoading(true);
     initialize();
   }, []);
 
