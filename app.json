@@ -17,7 +17,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.flashride.app",
       "config": {
-        "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+        "googleMapsApiKey": "AIzaSyDc7iAK_o9mYjjeFggqLOetYiV3j1UaqIc"
       }
     },
     "android": {
@@ -30,7 +30,7 @@
       "package": "com.flashride.app",
       "config": {
         "googleMaps": {
-          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+          "apiKey": "AIzaSyDc7iAK_o9mYjjeFggqLOetYiV3j1UaqIc"
         }
       },
       "permissions": [
