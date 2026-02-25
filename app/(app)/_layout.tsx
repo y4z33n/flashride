@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+﻿import { Tabs } from 'expo-router';
 import { Text } from 'react-native';
 
 function TabIcon({ symbol, color }: { symbol: string; color: string }) {
@@ -13,6 +13,7 @@ export default function AppLayout() {
         headerShown: false,
       }}
     >
+      <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen
         name="session-viewer"
         options={{
