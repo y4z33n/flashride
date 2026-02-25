@@ -14,8 +14,9 @@ export default function AppLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ href: null }} />
-      {/* Hide the dynamic ride detail route from the tab bar */}
+      {/* Hide dynamic routes from the tab bar */}
       <Tabs.Screen name="ride/[id]" options={{ href: null }} />
+      <Tabs.Screen name="chat/[id]" options={{ href: null }} />
       <Tabs.Screen
         name="session-viewer"
         options={{

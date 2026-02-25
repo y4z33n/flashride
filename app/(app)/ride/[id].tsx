@@ -117,6 +117,16 @@ export default function RideDetailScreen() {
           <Text style={s.backText}>← Back</Text>
         </TouchableOpacity>
 
+        {/* Chat button — always visible for driver; visible for accepted riders */}
+        {(isDriver || myRequest?.status === "accepted") && (
+          <TouchableOpacity
+            style={s.chatBtn}
+            onPress={() => router.push(`/(app)/chat/${ride.id}` as any)}
+          >
+            <Text style={s.chatBtnText}>💬  Open Group Chat</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={[s.badge, { backgroundColor: statusColors[ride.status] + "22" }]}>
           <Text style={[s.badgeText, { color: statusColors[ride.status] }]}>
             {ride.status.replace("_", " ").toUpperCase()}
@@ -321,4 +331,9 @@ const s = StyleSheet.create({
   fullText: { color: "#FF9500", fontWeight: "700", fontSize: 15 },
   requestedBanner: { backgroundColor: "#FF950018", padding: 14, borderRadius: 12, alignItems: "center", marginTop: 8 },
   requestedText: { color: "#FF9500", fontWeight: "700", fontSize: 15 },
+  chatBtn: {
+    backgroundColor: "#5856D6", padding: 13, borderRadius: 12,
+    alignItems: "center", marginBottom: 16, flexDirection: "row", justifyContent: "center",
+  },
+  chatBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });
