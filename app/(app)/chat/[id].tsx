@@ -39,20 +39,29 @@ export default function ChatScreen() {
           filter: `ride_id=eq.${rideId}`,
         },
         async (payload) => {
-          // Fetch the new message with sender profile joined
-          const { data } = await supabase
-            .from('messages')
-            .select('*, sender:profiles!sender_id(*)')
-            .eq('id', payload.new.id)
-            .single();
-          if (data) {
-            setMessages(prev => {
-              // Avoid duplicates (our own optimistic message)
-              if (prev.some(m => m.id === data.id)) return prev;
-              return [...prev, data];
-            });
-            scrollToBottom();
-          }
+          const newMsg = payload.new as Message;
+
+          // Skip our own optimistic messages (already in state)
+          setMessages(prev => {
+            if (prev.some(m => m.id === newMsg.id)) return prev;
+
+            // Attach sender profile — fetch async then update
+            supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', newMsg.sender_id)
+              .single()
+              .then(({ data: sender }) => {
+                setMessages(current =>
+                  current.map(m =>
+                    m.id === newMsg.id ? { ...m, sender: sender ?? undefined } : m
+                  )
+                );
+              });
+
+            return [...prev, { ...newMsg, sender: undefined }];
+          });
+          scrollToBottom();
         }
       )
       .subscribe();
