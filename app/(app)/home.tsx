@@ -31,7 +31,7 @@ export default function HomeScreen() {
   const onRefresh = () => { setRefreshing(true); load(); };
 
   const activeRides = myRides.filter(r => ["open","full","in_progress"].includes(r.status)).slice(0, 3);
-  const pendingReqs = myRequests.filter(r => r.status === "pending").slice(0, 3);
+  const activeReqs = myRequests.filter(r => ["pending", "accepted"].includes(r.status)).slice(0, 5);
 
   return (
     <SafeAreaView style={s.container}>
@@ -68,17 +68,17 @@ export default function HomeScreen() {
               </View>
             )}
 
-            {/* My pending requests (as rider) */}
-            {pendingReqs.length > 0 && (
+            {/* My requests as rider (pending + accepted) */}
+            {activeReqs.length > 0 && (
               <View style={s.section}>
-                <Text style={s.sectionTitle}>My Pending Requests</Text>
-                {pendingReqs.map(req => (
+                <Text style={s.sectionTitle}>My Ride Requests</Text>
+                {activeReqs.map((req: any) => (
                   <RequestRow key={req.id} req={req} onPress={() => router.push(`/(app)/ride/${req.ride_id}` as any)} />
                 ))}
               </View>
             )}
 
-            {activeRides.length === 0 && pendingReqs.length === 0 && (
+            {activeRides.length === 0 && activeReqs.length === 0 && (
               <View style={s.empty}>
                 <Text style={s.emptyEmoji}>🗺️</Text>
                 <Text style={s.emptyTitle}>No activity yet</Text>
@@ -112,16 +112,21 @@ function RideRow({ ride, onPress }: { ride: any; onPress: () => void }) {
 }
 
 function RequestRow({ req, onPress }: { req: any; onPress: () => void }) {
-  const dep = req.ride?.departure_time ? new Date(req.ride.departure_time).toLocaleDateString("en-MU", { weekday: "short", day: "numeric", month: "short" }) : "";
+  const dep = req.ride?.departure_time
+    ? new Date(req.ride.departure_time).toLocaleDateString("en-MU", { weekday: "short", day: "numeric", month: "short" })
+    : "";
+  const isAccepted = req.status === "accepted";
   return (
     <TouchableOpacity style={s.rowCard} onPress={onPress} activeOpacity={0.8}>
       <View style={{ flex: 1 }}>
         <Text style={s.rowFrom} numberOfLines={1}>{req.ride?.origin_address ?? "..."}</Text>
-        <Text style={s.rowArrow}>→</Text>
+        <Text style={s.rowArrow}>to</Text>
         <Text style={s.rowTo} numberOfLines={1}>{req.ride?.destination_address ?? "..."}</Text>
-        <Text style={s.rowMeta}>{dep}  •  Awaiting driver</Text>
+        <Text style={s.rowMeta}>
+          {dep}  •  {isAccepted ? "✅ Accepted" : "⏳ Awaiting driver"}
+        </Text>
       </View>
-      <View style={[s.statusDot, { backgroundColor: "#FF9500" }]} />
+      <View style={[s.statusDot, { backgroundColor: isAccepted ? "#34C759" : "#FF9500" }]} />
     </TouchableOpacity>
   );
 }

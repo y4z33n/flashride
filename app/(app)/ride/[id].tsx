@@ -16,6 +16,7 @@ export default function RideDetailScreen() {
   const { setCurrentRide, setIncomingRequests } = useRideStore();
   const [ride, setRide] = useState<any>(null);
   const [requests, setRequests] = useState<any[]>([]);
+  const [myRequest, setMyRequest] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -34,6 +35,11 @@ export default function RideDetailScreen() {
         const { data: reqs } = await requestService.getForRide(id!);
         setRequests(reqs || []);
         setIncomingRequests(reqs || []);
+      } else {
+        // Load this rider's own request for this ride
+        const { data: riderReqs } = await requestService.getForRider(session!.user.id);
+        const existing = (riderReqs || []).find((r: any) => r.ride_id === id);
+        setMyRequest(existing ?? null);
       }
     } catch (err: any) {
       Alert.alert("Error", err.message);
@@ -45,14 +51,14 @@ export default function RideDetailScreen() {
   const handleRequest = async () => {
     setActionLoading("request");
     try {
-      const { error } = await requestService.create({
+      const { data, error } = await requestService.create({
         ride_id: ride.id,
         rider_id: session!.user.id,
         seats_requested: 1,
         message: "",
       });
       if (error) throw error;
-      Alert.alert("Request Sent!", "The driver will review your request.");
+      setMyRequest(data);
     } catch (err: any) {
       Alert.alert("Error", err.message);
     } finally {
@@ -212,23 +218,50 @@ export default function RideDetailScreen() {
           </View>
         )}
 
-        {/* RIDER: join button */}
-        {!isDriver && ride.status === "open" && (
-          <TouchableOpacity
-            style={[s.joinBtn, actionLoading === "request" && { opacity: 0.6 }]}
-            onPress={handleRequest}
-            disabled={actionLoading === "request"}
-          >
-            {actionLoading === "request"
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={s.joinBtnText}>Request to Join</Text>}
-          </TouchableOpacity>
-        )}
+        {/* RIDER: join / request status */}
+        {!isDriver && (
+          <>
+            {/* Not yet requested & ride is open */}
+            {!myRequest && ride.status === "open" && (
+              <TouchableOpacity
+                style={[s.joinBtn, actionLoading === "request" && { opacity: 0.6 }]}
+                onPress={handleRequest}
+                disabled={actionLoading === "request"}
+              >
+                {actionLoading === "request"
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={s.joinBtnText}>Request to Join</Text>}
+              </TouchableOpacity>
+            )}
 
-        {!isDriver && ride.status === "full" && (
-          <View style={s.fullBanner}>
-            <Text style={s.fullText}>This ride is full</Text>
-          </View>
+            {/* Pending request */}
+            {myRequest?.status === "pending" && (
+              <View style={s.requestedBanner}>
+                <Text style={s.requestedText}>⏳  Ride Requested — awaiting driver</Text>
+              </View>
+            )}
+
+            {/* Accepted */}
+            {myRequest?.status === "accepted" && (
+              <View style={[s.requestedBanner, { backgroundColor: "#34C75920" }]}>
+                <Text style={[s.requestedText, { color: "#34C759" }]}>✅  You're on this ride!</Text>
+              </View>
+            )}
+
+            {/* Rejected */}
+            {myRequest?.status === "rejected" && (
+              <View style={[s.requestedBanner, { backgroundColor: "#FF3B3015" }]}>
+                <Text style={[s.requestedText, { color: "#FF3B30" }]}>❌  Request declined by driver</Text>
+              </View>
+            )}
+
+            {/* Ride is full and no prior request */}
+            {!myRequest && ride.status === "full" && (
+              <View style={s.fullBanner}>
+                <Text style={s.fullText}>This ride is full</Text>
+              </View>
+            )}
+          </>
         )}
 
         <View style={{ height: 48 }} />
@@ -286,4 +319,6 @@ const s = StyleSheet.create({
   joinBtnText: { color: "#fff", fontSize: 17, fontWeight: "700" },
   fullBanner: { backgroundColor: "#FF950020", padding: 14, borderRadius: 12, alignItems: "center", marginTop: 8 },
   fullText: { color: "#FF9500", fontWeight: "700", fontSize: 15 },
+  requestedBanner: { backgroundColor: "#FF950018", padding: 14, borderRadius: 12, alignItems: "center", marginTop: 8 },
+  requestedText: { color: "#FF9500", fontWeight: "700", fontSize: 15 },
 });
