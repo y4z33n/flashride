@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
+import { supabase } from '../../lib/supabase';
 import { rideService, requestService, ratingService } from '../../lib/api';
 
 export default function ProfileScreen() {
@@ -33,6 +34,40 @@ export default function ProfileScreen() {
   }, [session?.user?.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Realtime: new rating received → fetch full rating with rater profile and prepend
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const channel = supabase
+      .channel(`ratings:${session.user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'ratings',
+          filter: `rated_id=eq.${session.user.id}`,
+        },
+        async (payload) => {
+          // Fetch with rater profile joined
+          const { data } = await supabase
+            .from('ratings')
+            .select('*, rater:profiles!rater_id(*)')
+            .eq('id', payload.new.id)
+            .single();
+          if (data) {
+            setRatings(prev => {
+              if (prev.some(r => r.id === data.id)) return prev;
+              return [data, ...prev];
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [session?.user?.id]);
 
   const onRefresh = () => { setRefreshing(true); load(); };
 
