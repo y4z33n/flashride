@@ -49,5 +49,5 @@ CREATE POLICY "location_updates_update"
   TO authenticated
   USING (auth.uid() = driver_id);
 
--- Enable realtime on location_updates
-ALTER PUBLICATION supabase_realtime ADD TABLE public.location_updates;
+-- Note: location_updates is already added to supabase_realtime publication
+-- ALTER PUBLICATION supabase_realtime ADD TABLE public.location_updates;
