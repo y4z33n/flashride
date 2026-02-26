@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, Switch,
+  ActivityIndicator, Alert, Switch, Modal, TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Location from "expo-location";
-import { rideService, requestService } from "../../../lib/api";
+import { rideService, requestService, ratingService } from "../../../lib/api";
 import { supabase } from "../../../lib/supabase";
 import { useAuthStore } from "../../../store/authStore";
 import { useRideStore } from "../../../store/rideStore";
@@ -25,6 +25,12 @@ export default function RideDetailScreen() {
   // Location sharing (driver only)
   const [sharingLocation, setSharingLocation] = useState(false);
   const locationWatcher = useRef<Location.LocationSubscription | null>(null);
+
+  // Rating modal
+  const [ratingModal, setRatingModal] = useState<{ userId: string; name: string } | null>(null);
+  const [ratingScore, setRatingScore] = useState(5);
+  const [ratingComment, setRatingComment] = useState("");
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
 
   const isDriver = ride?.driver_id === session?.user?.id;
 
@@ -157,6 +163,47 @@ export default function RideDetailScreen() {
         });
       }
     );
+  };
+
+  const handleCompleteRide = () => {
+    Alert.alert("Complete Ride", "Mark this ride as completed?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Complete",
+        onPress: async () => {
+          const { error } = await rideService.updateStatus(ride.id, "completed");
+          if (error) { Alert.alert("Error", error.message); return; }
+          await loadRide();
+          // Prompt driver to rate each accepted rider
+          const accepted = requests.filter((r: any) => r.status === "accepted");
+          if (accepted.length > 0) {
+            setRatingModal({ userId: accepted[0].rider_id, name: accepted[0].rider?.full_name ?? "Rider" });
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleSubmitRating = async () => {
+    if (!ratingModal) return;
+    setRatingSubmitting(true);
+    try {
+      const { error } = await ratingService.submit({
+        ride_id: ride.id,
+        rater_id: session!.user.id,
+        rated_id: ratingModal.userId,
+        score: ratingScore,
+        comment: ratingComment.trim() || undefined,
+      });
+      if (error && !error.message.includes("duplicate")) throw error;
+    } catch (err: any) {
+      Alert.alert("Error", err.message);
+    } finally {
+      setRatingSubmitting(false);
+      setRatingModal(null);
+      setRatingScore(5);
+      setRatingComment("");
+    }
   };
 
   const handleCancelRide = () => {
@@ -302,6 +349,13 @@ export default function RideDetailScreen() {
                   )}
                 </View>
               ))}
+            {/* Complete ride button — only when ride is open/full/in_progress */}
+            {["open", "full", "in_progress"].includes(ride.status) && (
+              <TouchableOpacity style={s.completeBtn} onPress={handleCompleteRide}>
+                <Text style={s.completeBtnText}>✅  Mark as Completed</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity style={s.cancelBtn} onPress={handleCancelRide}>
               <Text style={s.cancelBtnText}>Cancel This Ride</Text>
             </TouchableOpacity>
@@ -356,8 +410,18 @@ export default function RideDetailScreen() {
               </View>
             )}
 
-            {/* Track driver map button — accepted riders only */}
-            {myRequest?.status === "accepted" && (
+            {/* Completed — rider can rate driver */}
+            {myRequest?.status === "accepted" && ride.status === "completed" && (
+              <TouchableOpacity
+                style={s.rateBtn}
+                onPress={() => setRatingModal({ userId: ride.driver_id, name: ride.driver?.full_name ?? "Driver" })}
+              >
+                <Text style={s.rateBtnText}>⭐  Rate Your Driver</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Track driver map button — accepted riders only, ride active */}
+            {myRequest?.status === "accepted" && ["open", "full", "in_progress"].includes(ride.status) && (
               <TouchableOpacity
                 style={s.trackBtn}
                 onPress={() => router.push(`/(app)/ride/map/${ride.id}` as any)}
@@ -384,6 +448,50 @@ export default function RideDetailScreen() {
 
         <View style={{ height: 48 }} />
       </ScrollView>
+
+      {/* ── Rating Modal ── */}
+      <Modal visible={!!ratingModal} transparent animationType="slide" onRequestClose={() => setRatingModal(null)}>
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <Text style={s.modalTitle}>Rate {ratingModal?.name}</Text>
+            <Text style={s.modalSub}>How was your experience?</Text>
+
+            {/* Star selector */}
+            <View style={s.stars}>
+              {[1, 2, 3, 4, 5].map(n => (
+                <TouchableOpacity key={n} onPress={() => setRatingScore(n)}>
+                  <Text style={[s.star, { opacity: n <= ratingScore ? 1 : 0.25 }]}>⭐</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={s.commentInput}
+              value={ratingComment}
+              onChangeText={setRatingComment}
+              placeholder="Leave a comment (optional)"
+              placeholderTextColor="#aaa"
+              multiline
+              maxLength={200}
+            />
+
+            <View style={s.modalActions}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => setRatingModal(null)}>
+                <Text style={s.modalCancelText}>Skip</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.modalSubmit, ratingSubmitting && { opacity: 0.6 }]}
+                onPress={handleSubmitRating}
+                disabled={ratingSubmitting}
+              >
+                {ratingSubmitting
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={s.modalSubmitText}>Submit</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -456,4 +564,43 @@ const s = StyleSheet.create({
     alignItems: "center", marginTop: 10,
   },
   trackBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  completeBtn: {
+    backgroundColor: "#34C759", padding: 14, borderRadius: 12,
+    alignItems: "center", marginBottom: 10,
+  },
+  completeBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  rateBtn: {
+    backgroundColor: "#FF9F0A", padding: 14, borderRadius: 12,
+    alignItems: "center", marginTop: 10,
+  },
+  rateBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  // Rating modal
+  modalOverlay: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalCard: {
+    backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 28, paddingBottom: 40,
+  },
+  modalTitle: { fontSize: 20, fontWeight: "800", color: "#111", textAlign: "center" },
+  modalSub: { fontSize: 14, color: "#888", textAlign: "center", marginTop: 4, marginBottom: 20 },
+  stars: { flexDirection: "row", justifyContent: "center", gap: 8, marginBottom: 20 },
+  star: { fontSize: 36 },
+  commentInput: {
+    backgroundColor: "#f5f5f5", borderRadius: 12,
+    padding: 14, fontSize: 15, color: "#111",
+    minHeight: 80, textAlignVertical: "top", marginBottom: 20,
+  },
+  modalActions: { flexDirection: "row", gap: 12 },
+  modalCancel: {
+    flex: 1, padding: 14, borderRadius: 12, borderWidth: 1.5,
+    borderColor: "#ddd", alignItems: "center",
+  },
+  modalCancelText: { fontSize: 15, fontWeight: "600", color: "#666" },
+  modalSubmit: {
+    flex: 2, backgroundColor: "#007AFF", padding: 14,
+    borderRadius: 12, alignItems: "center",
+  },
+  modalSubmitText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });
