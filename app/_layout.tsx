@@ -1,9 +1,13 @@
 ﻿import { Stack, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { useAuthStore } from '../store/authStore';
 import { registerPushToken } from '../lib/notifications';
+
+function isExpoGo() {
+  return Constants.executionEnvironment === 'storeClient';
+}
 
 export default function RootLayout() {
   const { initialize, session } = useAuthStore();
@@ -25,7 +29,11 @@ export default function RootLayout() {
 
   // Handle notification tap — navigate to the relevant screen
   useEffect(() => {
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+    if (isExpoGo()) return; // Not supported in Expo Go SDK 53+
+
+    // Lazy import to avoid module-level side effects in Expo Go
+    const Notifications = require('expo-notifications');
+    responseListener.current = Notifications.addNotificationResponseReceivedListener((response: any) => {
       const data = response.notification.request.content.data as any;
       if (data?.rideId) {
         router.push(`/(app)/ride/${data.rideId}` as any);

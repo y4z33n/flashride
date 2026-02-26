@@ -1,39 +1,56 @@
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
-// How notifications behave when app is in foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+/**
+ * Detect if running inside Expo Go (storeClient).
+ * expo-notifications remote push is NOT supported in Expo Go SDK 53+.
+ */
+function isExpoGo(): boolean {
+  return Constants.executionEnvironment === 'storeClient';
+}
+
+/**
+ * Set the foreground notification handler.
+ * Only called in non-Expo-Go environments.
+ */
+function setupHandler() {
+  if (isExpoGo()) return;
+  // Lazy import to avoid the module-level side effects in Expo Go
+  const Notifications = require('expo-notifications');
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
+
+setupHandler();
 
 /**
  * Request permission and register the Expo push token with Supabase.
- * Call this once after the user is authenticated.
+ * Silently skips in Expo Go (remote push removed in SDK 53).
  */
 export async function registerPushToken(userId: string): Promise<void> {
-  // Push notifications only work on real devices
+  if (isExpoGo()) return;
+
+  const Device = require('expo-device');
   if (!Device.isDevice) return;
+
+  const Notifications = require('expo-notifications');
 
   const { status: existing } = await Notifications.getPermissionsAsync();
   let finalStatus = existing;
-
   if (existing !== 'granted') {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }
-
   if (finalStatus !== 'granted') return;
 
-  // Android needs a notification channel
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'FlashRide',
@@ -48,22 +65,18 @@ export async function registerPushToken(userId: string): Promise<void> {
       Constants.expoConfig?.extra?.eas?.projectId ??
       Constants.easConfig?.projectId;
 
-    const tokenData = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId } : undefined
-    );
-    const token = tokenData.data;
+    if (!projectId) {
+      console.warn('[Notifications] No EAS projectId — skipping token registration.');
+      return;
+    }
 
-    // Upsert into push_tokens table
+    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
     await supabase.from('push_tokens').upsert(
-      {
-        user_id: userId,
-        token,
-        platform: Platform.OS as 'ios' | 'android' | 'web',
-      },
+      { user_id: userId, token, platform: Platform.OS as 'ios' | 'android' | 'web' },
       { onConflict: 'user_id,token' }
     );
   } catch (err) {
-    console.warn('Push token registration failed:', err);
+    console.warn('[Notifications] Token registration failed:', err);
   }
 }
 
