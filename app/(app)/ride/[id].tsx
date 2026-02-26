@@ -30,6 +30,33 @@ export default function RideDetailScreen() {
 
   useEffect(() => { loadRide(); }, [id]);
 
+  // Subscribe to realtime updates on this rider's own request
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const channel = supabase
+      .channel(`request_status:${id}:${session.user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'ride_requests',
+          filter: `ride_id=eq.${id}`,
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          // Only update state if it's our own request
+          if (updated.rider_id === session.user.id) {
+            setMyRequest((prev: any) => prev ? { ...prev, ...updated } : updated);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [id, session?.user?.id]);
+
   // Stop sharing on unmount
   useEffect(() => {
     return () => {
