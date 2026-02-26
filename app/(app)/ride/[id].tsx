@@ -343,12 +343,15 @@ export default function RideDetailScreen() {
           <View style={s.driverAvatar}>
             <Text style={s.driverAvatarText}>{(ride.driver?.full_name || "?")[0].toUpperCase()}</Text>
           </View>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={s.driverName}>{ride.driver?.full_name}</Text>
             <Text style={s.driverMeta}>
               {ride.driver?.rating_avg > 0 ? `⭐ ${ride.driver.rating_avg}` : "New driver"}
               {ride.driver?.phone ? `  •  📞 ${ride.driver.phone}` : ""}
             </Text>
+            {ride.driver?.vehicle_info ? (
+              <Text style={s.driverVehicle}>🚗 {ride.driver.vehicle_info}</Text>
+            ) : null}
           </View>
         </View>
 
@@ -476,8 +479,28 @@ export default function RideDetailScreen() {
 
             {/* Pending request */}
             {myRequest?.status === "pending" && (
-              <View style={s.requestedBanner}>
-                <Text style={s.requestedText}>⏳  Ride Requested — awaiting driver</Text>
+              <View>
+                <View style={s.requestedBanner}>
+                  <Text style={s.requestedText}>⏳  Ride Requested — awaiting driver</Text>
+                </View>
+                <TouchableOpacity
+                  style={s.cancelRequestBtn}
+                  onPress={() => {
+                    Alert.alert("Cancel Request", "Are you sure you want to cancel your request?", [
+                      { text: "No", style: "cancel" },
+                      {
+                        text: "Yes, Cancel", style: "destructive",
+                        onPress: async () => {
+                          const { error } = await requestService.updateStatus(myRequest.id, "cancelled");
+                          if (error) Alert.alert("Error", error.message);
+                          else setMyRequest((prev: any) => prev ? { ...prev, status: "cancelled" } : null);
+                        },
+                      },
+                    ]);
+                  }}
+                >
+                  <Text style={s.cancelRequestBtnText}>Cancel Request</Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -609,6 +632,7 @@ const s = StyleSheet.create({
   driverAvatarText: { color: "#fff", fontSize: 20, fontWeight: "bold" },
   driverName: { fontSize: 16, fontWeight: "700", color: "#111" },
   driverMeta: { fontSize: 13, color: "#666", marginTop: 2 },
+  driverVehicle: { fontSize: 13, color: "#555", marginTop: 3 },
   sectionTitle: { fontSize: 18, fontWeight: "700", color: "#111", marginBottom: 12 },
   emptyText: { color: "#999", fontSize: 14, marginBottom: 16 },
   reqCard: { backgroundColor: "#fff", borderRadius: 12, padding: 14, marginBottom: 10, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
@@ -623,6 +647,8 @@ const s = StyleSheet.create({
   reqBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
   cancelBtn: { marginTop: 16, borderWidth: 1.5, borderColor: "#FF3B30", padding: 14, borderRadius: 12, alignItems: "center" },
   cancelBtnText: { color: "#FF3B30", fontWeight: "700", fontSize: 15 },
+  cancelRequestBtn: { marginTop: 10, borderWidth: 1.5, borderColor: "#FF3B30", padding: 12, borderRadius: 12, alignItems: "center" },
+  cancelRequestBtnText: { color: "#FF3B30", fontWeight: "700", fontSize: 14 },
   joinBtn: { backgroundColor: "#007AFF", padding: 16, borderRadius: 12, alignItems: "center", marginTop: 8 },
   joinBtnText: { color: "#fff", fontSize: 17, fontWeight: "700" },
   fullBanner: { backgroundColor: "#FF950020", padding: 14, borderRadius: 12, alignItems: "center", marginTop: 8 },

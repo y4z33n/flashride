@@ -5,6 +5,7 @@ import Constants from 'expo-constants';
 import { useAuthStore } from '../store/authStore';
 import { registerPushToken } from '../lib/notifications';
 import { setupGlobalErrorHandler, logger } from '../lib/errorTracking';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 function isExpoGo() {
   return Constants.executionEnvironment === 'storeClient';
@@ -57,9 +58,11 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }} initialRouteName="(app)">
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(app)" />
-    </Stack>
+    <ErrorBoundary>
+      <Stack screenOptions={{ headerShown: false }} initialRouteName="(app)">
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(app)" />
+      </Stack>
+    </ErrorBoundary>
   );
 }

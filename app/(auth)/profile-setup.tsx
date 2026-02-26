@@ -1,24 +1,50 @@
-﻿import { useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Alert, ScrollView,
+  ActivityIndicator, Alert, ScrollView, Switch,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { authService } from '../../lib/auth';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
+import { validate, firstError } from '../../lib/validation';
 
 export default function ProfileSetupScreen() {
   const router = useRouter();
-  const { setProfile } = useAuthStore();
+  const { setProfile, profile } = useAuthStore();
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [isDriver, setIsDriver] = useState(false);
+  // Vehicle fields (only shown when isDriver is true)
+  const [vehicleMake, setVehicleMake] = useState('');
+  const [vehicleModel, setVehicleModel] = useState('');
+  const [vehicleColor, setVehicleColor] = useState('');
+  const [vehiclePlate, setVehiclePlate] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Pre-fill if editing existing profile
+  useEffect(() => {
+    if (profile) {
+      setFullName(profile.full_name ?? '');
+      setPhone(profile.phone ?? '');
+      setIsDriver(profile.is_driver ?? false);
+    }
+  }, [profile]);
+
   const handleSave = async () => {
-    if (!fullName.trim()) {
-      Alert.alert('Error', 'Full name is required');
+    const err = firstError(
+      validate.fullName(fullName),
+      validate.phone(phone),
+      ...(isDriver ? [
+        validate.vehicleText(vehicleMake, 'Vehicle make'),
+        validate.vehicleText(vehicleModel, 'Vehicle model'),
+        validate.vehicleText(vehicleColor, 'Vehicle colour'),
+        validate.numberPlate(vehiclePlate),
+      ] : []),
+    );
+    if (err) {
+      Alert.alert('Invalid Input', err);
       return;
     }
 
@@ -31,27 +57,51 @@ export default function ProfileSetupScreen() {
         return;
       }
 
-      // Check if profile already exists
+      // Build vehicle_info string
+      const vehicleInfo = isDriver
+        ? [
+            vehicleColor.trim(),
+            vehicleMake.trim(),
+            vehicleModel.trim(),
+            vehiclePlate.trim() ? `(${vehiclePlate.trim().toUpperCase()})` : '',
+          ].filter(Boolean).join(' ')
+        : '';
+
       const { data: existing } = await authService.getProfile(session.user.id);
       let profileData;
 
+      const updates = {
+        full_name: fullName.trim(),
+        phone: phone.trim(),
+        is_driver: isDriver,
+        ...(vehicleInfo ? { vehicle_info: vehicleInfo } : {}),
+      };
+
       if (existing) {
-        // Update existing profile
-        const { data, error } = await authService.updateProfile(session.user.id, {
-          full_name: fullName.trim(),
-          phone: phone.trim(),
-        });
+        const { data, error } = await supabase
+          .from('profiles')
+          .update(updates)
+          .eq('id', session.user.id)
+          .select()
+          .single();
         if (error) throw error;
         profileData = data;
       } else {
-        // Create new profile
         const { data, error } = await authService.createProfile(
           session.user.id,
           session.user.email!,
           { full_name: fullName.trim(), phone: phone.trim() }
         );
         if (error) throw error;
-        profileData = data;
+        // Then update with extra fields
+        const { data: updated, error: updErr } = await supabase
+          .from('profiles')
+          .update({ is_driver: isDriver, ...(vehicleInfo ? { vehicle_info: vehicleInfo } : {}) })
+          .eq('id', session.user.id)
+          .select()
+          .single();
+        if (updErr) throw updErr;
+        profileData = updated ?? data;
       }
 
       setProfile(profileData);
@@ -71,11 +121,14 @@ export default function ProfileSetupScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={styles.emoji}>👤</Text>
-          <Text style={styles.title}>Set Up Profile</Text>
+          <Text style={styles.title}>{profile ? 'Edit Profile' : 'Set Up Profile'}</Text>
           <Text style={styles.subtitle}>Tell other riders who you are</Text>
         </View>
 
+        {/* ── Basic Info ─────────────────────── */}
         <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Basic Info</Text>
+
           <Text style={styles.label}>Full Name *</Text>
           <TextInput
             style={styles.input}
@@ -84,6 +137,7 @@ export default function ProfileSetupScreen() {
             onChangeText={setFullName}
             autoCapitalize="words"
             placeholderTextColor="#999"
+            maxLength={80}
           />
 
           <Text style={styles.label}>Phone Number</Text>
@@ -94,24 +148,100 @@ export default function ProfileSetupScreen() {
             onChangeText={setPhone}
             keyboardType="phone-pad"
             placeholderTextColor="#999"
+            maxLength={20}
           />
-
-          <Text style={styles.hint}>
-            📍 FlashRide is for Mauritius-based rides only
-          </Text>
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleSave}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Save & Continue</Text>
-            )}
-          </TouchableOpacity>
         </View>
+
+        {/* ── Driver Toggle ──────────────────── */}
+        <View style={styles.card}>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleLabel}>I want to offer rides</Text>
+              <Text style={styles.toggleSub}>Enable driver mode to post rides</Text>
+            </View>
+            <Switch
+              value={isDriver}
+              onValueChange={setIsDriver}
+              trackColor={{ false: '#ddd', true: '#34C75980' }}
+              thumbColor={isDriver ? '#34C759' : '#fff'}
+            />
+          </View>
+        </View>
+
+        {/* ── Vehicle Info (driver only) ────── */}
+        {isDriver && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>🚗  Vehicle Info</Text>
+            <Text style={styles.sectionHint}>Help riders identify your car at the pickup point</Text>
+
+            <View style={styles.row}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <Text style={styles.label}>Make</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Toyota"
+                  value={vehicleMake}
+                  onChangeText={setVehicleMake}
+                  autoCapitalize="words"
+                  placeholderTextColor="#999"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Model</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Vitz"
+                  value={vehicleModel}
+                  onChangeText={setVehicleModel}
+                  autoCapitalize="words"
+                  placeholderTextColor="#999"
+                />
+              </View>
+            </View>
+
+            <View style={styles.row}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <Text style={styles.label}>Colour</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. White"
+                  value={vehicleColor}
+                  onChangeText={setVehicleColor}
+                  autoCapitalize="words"
+                  placeholderTextColor="#999"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Number Plate</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. B1234X"
+                  value={vehiclePlate}
+                  onChangeText={v => setVehiclePlate(v.toUpperCase())}
+                  autoCapitalize="characters"
+                  maxLength={12}
+                  placeholderTextColor="#999"
+                />
+              </View>
+            </View>
+          </View>
+        )}
+
+        <Text style={styles.hint}>📍 FlashRide is for Mauritius-based rides only</Text>
+
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleSave}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Save & Continue</Text>
+          )}
+        </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -119,32 +249,42 @@ export default function ProfileSetupScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f7fa' },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  header: { alignItems: 'center', marginBottom: 32 },
+  scroll: { flexGrow: 1, padding: 24 },
+  header: { alignItems: 'center', marginBottom: 28, marginTop: 16 },
   emoji: { fontSize: 56, marginBottom: 8 },
   title: { fontSize: 28, fontWeight: 'bold', color: '#111' },
   subtitle: { fontSize: 16, color: '#666', marginTop: 4 },
   card: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    padding: 24,
+    padding: 20,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
   },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#111', marginBottom: 14 },
+  sectionHint: { fontSize: 12, color: '#999', marginTop: -10, marginBottom: 14 },
   label: { fontSize: 14, fontWeight: '600', color: '#444', marginBottom: 6 },
   input: {
     borderWidth: 1,
     borderColor: '#e0e0e0',
     borderRadius: 10,
-    padding: 14,
-    fontSize: 16,
-    marginBottom: 16,
+    padding: 13,
+    fontSize: 15,
+    marginBottom: 14,
     backgroundColor: '#fafafa',
     color: '#111',
   },
+  row: { flexDirection: 'row' },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  toggleLabel: { fontSize: 15, fontWeight: '700', color: '#111' },
+  toggleSub: { fontSize: 12, color: '#999', marginTop: 2 },
   hint: {
     fontSize: 13,
     color: '#888',
@@ -154,7 +294,7 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: '#007AFF',
     padding: 16,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
   },
   buttonDisabled: { opacity: 0.6 },

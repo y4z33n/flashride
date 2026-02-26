@@ -14,17 +14,11 @@ export default function AppLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ href: null }} />
-      {/* Hide dynamic routes from the tab bar */}
+      {/* Hide dynamic routes and debug screens from the tab bar */}
       <Tabs.Screen name="ride/[id]" options={{ href: null }} />
       <Tabs.Screen name="ride/map/[id]" options={{ href: null }} />
       <Tabs.Screen name="chat/[id]" options={{ href: null }} />
-      <Tabs.Screen
-        name="session-viewer"
-        options={{
-          title: 'Session',
-          tabBarIcon: ({ color }) => <TabIcon symbol="📡" color={color} />,
-        }}
-      />
+      <Tabs.Screen name="session-viewer" options={{ href: null }} />
       <Tabs.Screen
         name="home"
         options={{

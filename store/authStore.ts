@@ -9,6 +9,7 @@ export interface Profile {
   phone: string;
   avatar_url?: string;
   is_driver: boolean;
+  vehicle_info?: string;
   rating_avg: number;
   rating_count: number;
   created_at: string;

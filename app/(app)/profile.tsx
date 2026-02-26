@@ -128,7 +128,10 @@ export default function ProfileScreen() {
         {/* Info card */}
         <View style={s.infoCard}>
           <Row icon="📞" label="Phone" value={profile?.phone || 'Not set'} />
-          <Row icon="🚗" label="Driver" value={profile?.is_driver ? 'Yes' : 'No'} />
+          <Row icon="🚗" label="Driver" value={profile?.is_driver ? '✅ Yes' : 'No'} />
+          {profile?.is_driver && profile?.vehicle_info && (
+            <Row icon="🚙" label="Vehicle" value={profile.vehicle_info} />
+          )}
           <Row icon="📅" label="Joined" value={profile ? new Date(profile.created_at).toLocaleDateString('en-MU', { month: 'long', year: 'numeric' }) : '—'} last />
         </View>
 
