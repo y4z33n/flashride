@@ -4,6 +4,7 @@ import { ActivityIndicator, View } from 'react-native';
 import Constants from 'expo-constants';
 import { useAuthStore } from '../store/authStore';
 import { registerPushToken } from '../lib/notifications';
+import { setupGlobalErrorHandler, logger } from '../lib/errorTracking';
 
 function isExpoGo() {
   return Constants.executionEnvironment === 'storeClient';
@@ -17,6 +18,8 @@ export default function RootLayout() {
   const responseListener = useRef<any>(null);
 
   useEffect(() => {
+    setupGlobalErrorHandler();
+    logger.info('App started', { version: Constants.expoConfig?.version ?? '1.0.0' });
     initialize().finally(() => setReady(true));
   }, []);
 
