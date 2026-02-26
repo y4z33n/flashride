@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store/authStore';
+import SkeletonLoader from '../../components/SkeletonLoader';
 
 interface ChatThread {
   rideId: string;
@@ -134,7 +135,17 @@ export default function InboxScreen() {
     <SafeAreaView style={s.container}>
       <Text style={s.title}>Inbox</Text>
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color="#007AFF" size="large" />
+        <View style={{ padding: 16 }}>
+          {[0, 1, 2, 3].map(i => (
+            <View key={i} style={[s.thread, { gap: 0 }]}>
+              <SkeletonLoader width={48} height={48} borderRadius={24} style={{ marginRight: 12 }} />
+              <View style={{ flex: 1, gap: 8 }}>
+                <SkeletonLoader width="60%" height={14} />
+                <SkeletonLoader width="80%" height={12} />
+              </View>
+            </View>
+          ))}
+        </View>
       ) : (
         <FlatList
           data={threads}

@@ -2,9 +2,10 @@
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Alert, ScrollView, Switch,
+  ActivityIndicator, Alert, ScrollView, Switch, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { authService } from '../../lib/auth';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
@@ -22,6 +23,8 @@ export default function ProfileSetupScreen() {
   const [vehicleColor, setVehicleColor] = useState('');
   const [vehiclePlate, setVehiclePlate] = useState('');
   const [loading, setLoading] = useState(false);
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   // Pre-fill if editing existing profile
   useEffect(() => {
@@ -29,8 +32,49 @@ export default function ProfileSetupScreen() {
       setFullName(profile.full_name ?? '');
       setPhone(profile.phone ?? '');
       setIsDriver(profile.is_driver ?? false);
+      setAvatarUri(profile.avatar_url ?? null);
     }
   }, [profile]);
+
+  const pickAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow access to your photo library.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    setUploadingAvatar(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not signed in');
+      // Upload to Supabase Storage: avatars/<userId>/avatar.jpg
+      const ext = asset.uri.split('.').pop() ?? 'jpg';
+      const path = `${session.user.id}/avatar.${ext}`;
+      const formData = new FormData();
+      formData.append('file', { uri: asset.uri, name: `avatar.${ext}`, type: `image/${ext}` } as any);
+      const { error } = await supabase.storage
+        .from('avatars')
+        .upload(path, formData, { upsert: true, contentType: `image/${ext}` });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
+      // Bust cache
+      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+      setAvatarUri(publicUrl);
+      // Save to profile immediately
+      await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', session.user.id);
+    } catch (err: any) {
+      Alert.alert('Upload failed', err.message);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   const handleSave = async () => {
     const err = firstError(
@@ -120,7 +164,22 @@ export default function ProfileSetupScreen() {
     >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Text style={styles.emoji}>👤</Text>
+          <TouchableOpacity onPress={pickAvatar} disabled={uploadingAvatar} style={styles.avatarPicker}>
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarPlaceholderText}>
+                  {fullName ? fullName[0].toUpperCase() : '👤'}
+                </Text>
+              </View>
+            )}
+            <View style={styles.cameraIcon}>
+              {uploadingAvatar
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={{ fontSize: 14 }}>�</Text>}
+            </View>
+          </TouchableOpacity>
           <Text style={styles.title}>{profile ? 'Edit Profile' : 'Set Up Profile'}</Text>
           <Text style={styles.subtitle}>Tell other riders who you are</Text>
         </View>
@@ -252,6 +311,20 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 1, padding: 24 },
   header: { alignItems: 'center', marginBottom: 28, marginTop: 16 },
   emoji: { fontSize: 56, marginBottom: 8 },
+  avatarPicker: { position: 'relative', marginBottom: 14 },
+  avatarImg: { width: 88, height: 88, borderRadius: 44, backgroundColor: '#e0e0e0' },
+  avatarPlaceholder: {
+    width: 88, height: 88, borderRadius: 44,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  avatarPlaceholderText: { fontSize: 36, fontWeight: 'bold', color: '#fff' },
+  cameraIcon: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#333', justifyContent: 'center', alignItems: 'center',
+    borderWidth: 2, borderColor: '#fff',
+  },
   title: { fontSize: 28, fontWeight: 'bold', color: '#111' },
   subtitle: { fontSize: 16, color: '#666', marginTop: 4 },
   card: {

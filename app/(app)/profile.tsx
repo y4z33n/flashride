@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
 import { rideService, requestService, ratingService } from '../../lib/api';
+import Avatar from '../../components/Avatar';
 
 export default function ProfileScreen() {
   const { session, profile, logout } = useAuthStore();
@@ -93,11 +94,17 @@ export default function ProfileScreen() {
       >
         {/* Avatar + name */}
         <View style={s.hero}>
-          <View style={s.avatar}>
-            <Text style={s.avatarText}>
-              {profile?.full_name?.charAt(0)?.toUpperCase() ?? '?'}
-            </Text>
-          </View>
+          <TouchableOpacity onPress={() => router.push('/(auth)/profile-setup')}>
+            <Avatar
+              name={profile?.full_name ?? '?'}
+              uri={profile?.avatar_url}
+              size={88}
+              style={s.avatar}
+            />
+            <View style={s.editAvatarBadge}>
+              <Text style={{ fontSize: 12 }}>📷</Text>
+            </View>
+          </TouchableOpacity>
           <Text style={s.name}>{profile?.full_name ?? '—'}</Text>
           <Text style={s.email}>{profile?.email ?? ''}</Text>
           {avgRating && (
@@ -196,12 +203,15 @@ const s = StyleSheet.create({
   scroll: { flex: 1 },
   hero: { alignItems: 'center', paddingTop: 28, paddingBottom: 20, backgroundColor: '#fff', marginBottom: 12 },
   avatar: {
-    width: 88, height: 88, borderRadius: 44,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center', alignItems: 'center', marginBottom: 12,
     shadowColor: '#007AFF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
   },
   avatarText: { fontSize: 40, color: '#fff', fontWeight: 'bold' },
+  editAvatarBadge: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: '#333', justifyContent: 'center', alignItems: 'center',
+    borderWidth: 2, borderColor: '#fff',
+  },
   name: { fontSize: 22, fontWeight: '800', color: '#111' },
   email: { fontSize: 14, color: '#888', marginTop: 2 },
   ratingBadge: {

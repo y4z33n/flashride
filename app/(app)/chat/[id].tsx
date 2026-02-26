@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput,
   TouchableOpacity, KeyboardAvoidingView, Platform,
@@ -9,6 +9,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../../../lib/supabase';
 import { messageService, rideService } from '../../../lib/api';
 import { useAuthStore } from '../../../store/authStore';
+import Avatar from '../../../components/Avatar';
 import type { Message } from '../../../lib/types';
 
 export default function ChatScreen() {
@@ -20,11 +21,14 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasOlder, setHasOlder] = useState(false);
+  const [page, setPage] = useState(0);
   const [sending, setSending] = useState(false);
   const [rideTitle, setRideTitle] = useState('Ride Chat');
 
   useEffect(() => {
-    loadMessages();
+    loadMessages(0);
     loadRideTitle();
 
     // ── Real-time subscription ──────────────────────────
@@ -69,19 +73,28 @@ export default function ChatScreen() {
     return () => { supabase.removeChannel(channel); };
   }, [rideId]);
 
-  const loadMessages = async () => {
-    setLoading(true);
+  const loadMessages = async (pageNum = 0, prepend = false) => {
+    if (pageNum === 0) setLoading(true);
+    else setLoadingOlder(true);
     try {
-      const { data, error } = await messageService.getForRide(rideId!);
+      const { data, error, hasMore } = await messageService.getForRide(rideId!, pageNum);
       if (error) throw error;
-      setMessages(data || []);
-      setTimeout(scrollToBottom, 100);
+      const msgs = data || [];
+      setMessages(prev => prepend ? [...msgs, ...prev] : msgs);
+      setHasOlder(hasMore ?? false);
+      setPage(pageNum);
+      if (pageNum === 0) setTimeout(scrollToBottom, 100);
     } catch (err: any) {
       Alert.alert('Error', err.message);
     } finally {
       setLoading(false);
+      setLoadingOlder(false);
     }
   };
+
+  const handleLoadOlder = useCallback(() => {
+    if (!loadingOlder && hasOlder) loadMessages(page + 1, true);
+  }, [loadingOlder, hasOlder, page]);
 
   const loadRideTitle = async () => {
     const { data } = await rideService.getById(rideId!);
@@ -146,7 +159,7 @@ export default function ChatScreen() {
         {!mine && (
           <View style={s.avatarCol}>
             {showSender
-              ? <View style={s.avatar}><Text style={s.avatarText}>{initial}</Text></View>
+              ? <Avatar name={senderName} uri={(item.sender as any)?.avatar_url} size={28} />
               : <View style={s.avatarSpacer} />
             }
           </View>
@@ -196,6 +209,15 @@ export default function ChatScreen() {
             renderItem={renderMessage}
             contentContainerStyle={s.messageList}
             onContentSizeChange={scrollToBottom}
+            ListHeaderComponent={
+              hasOlder ? (
+                <TouchableOpacity style={s.loadOlderBtn} onPress={handleLoadOlder} disabled={loadingOlder}>
+                  {loadingOlder
+                    ? <ActivityIndicator size="small" color="#007AFF" />
+                    : <Text style={s.loadOlderText}>Load older messages</Text>}
+                </TouchableOpacity>
+              ) : null
+            }
             ListEmptyComponent={
               <View style={s.empty}>
                 <Text style={s.emptyEmoji}>💬</Text>
@@ -317,4 +339,8 @@ const s = StyleSheet.create({
   },
   sendBtnDisabled: { backgroundColor: '#c0d8f5' },
   sendBtnText: { color: '#fff', fontSize: 18, fontWeight: '700', marginTop: -2 },
+  loadOlderBtn: {
+    alignItems: 'center', paddingVertical: 10, marginBottom: 8,
+  },
+  loadOlderText: { color: '#007AFF', fontSize: 13, fontWeight: '600' },
 });

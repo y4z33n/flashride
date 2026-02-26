@@ -81,8 +81,9 @@ export async function registerPushToken(userId: string): Promise<void> {
 }
 
 /**
- * Send a push notification via Supabase Edge Function.
- * Falls back to a direct Expo Push API call if no edge function is set up.
+ * Send a push notification via Supabase Edge Function (server-side, secure).
+ * The Edge Function holds the service-role key — push tokens are never
+ * fetched or readable client-side.
  */
 export async function sendPushNotification(
   toUserId: string,
@@ -91,32 +92,12 @@ export async function sendPushNotification(
   data?: Record<string, any>
 ): Promise<void> {
   try {
-    // Get the target user's push token(s)
-    const { data: tokens } = await supabase
-      .from('push_tokens')
-      .select('token')
-      .eq('user_id', toUserId);
-
-    if (!tokens || tokens.length === 0) return;
-
-    const messages = tokens.map(({ token }) => ({
-      to: token,
-      sound: 'default',
-      title,
-      body,
-      data: data ?? {},
-    }));
-
-    // Send via Expo Push API
-    await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(messages),
+    const { error } = await supabase.functions.invoke('send-push', {
+      body: { userId: toUserId, title, body, data: data ?? {} },
     });
+    if (error) throw error;
   } catch (err) {
     console.warn('Failed to send push notification:', err);
   }
 }
+

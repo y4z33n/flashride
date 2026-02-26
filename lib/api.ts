@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import type { Ride, RideRequest, Message, LocationUpdate, Rating } from './types';
 
+export const PAGE_SIZE = 20;
+
 // ── Rides ──────────────────────────────────────────────────
 
 export const rideService = {
@@ -19,6 +21,7 @@ export const rideService = {
     destination_lat: number;
     destination_lng: number;
     date: string; // ISO date string
+    page?: number;
   }) => {
     // Search within ±1 day of the given date, status open
     const start = new Date(params.date);
@@ -26,15 +29,20 @@ export const rideService = {
     const end = new Date(params.date);
     end.setHours(23, 59, 59, 999);
 
-    const { data, error } = await supabase
+    const page = params.page ?? 0;
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    const { data, error, count } = await supabase
       .from('rides')
-      .select('*, driver:profiles!driver_id(*)')
+      .select('*, driver:profiles!driver_id(*)', { count: 'exact' })
       .eq('status', 'open')
       .gte('departure_time', start.toISOString())
       .lte('departure_time', end.toISOString())
       .gt('seats_available', 0)
-      .order('departure_time', { ascending: true });
-    return { data, error };
+      .order('departure_time', { ascending: true })
+      .range(from, to);
+    return { data, error, count, hasMore: (count ?? 0) > to + 1 };
   },
 
   getById: async (id: string) => {
@@ -46,13 +54,16 @@ export const rideService = {
     return { data, error };
   },
 
-  getMyRides: async (userId: string) => {
-    const { data, error } = await supabase
+  getMyRides: async (userId: string, page = 0) => {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    const { data, error, count } = await supabase
       .from('rides')
-      .select('*, driver:profiles!driver_id(*)')
+      .select('*, driver:profiles!driver_id(*)', { count: 'exact' })
       .eq('driver_id', userId)
-      .order('departure_time', { ascending: false });
-    return { data, error };
+      .order('departure_time', { ascending: false })
+      .range(from, to);
+    return { data, error, count, hasMore: (count ?? 0) > to + 1 };
   },
 
   updateStatus: async (rideId: string, status: Ride['status']) => {
@@ -110,13 +121,17 @@ export const requestService = {
 // ── Messages ───────────────────────────────────────────────
 
 export const messageService = {
-  getForRide: async (rideId: string) => {
-    const { data, error } = await supabase
+  getForRide: async (rideId: string, page = 0) => {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    const { data, error, count } = await supabase
       .from('messages')
-      .select('*, sender:profiles!sender_id(*)')
+      .select('*, sender:profiles!sender_id(*)', { count: 'exact' })
       .eq('ride_id', rideId)
-      .order('created_at', { ascending: true });
-    return { data, error };
+      .order('created_at', { ascending: false })  // newest first for pagination
+      .range(from, to);
+    // Reverse so oldest shows at top in the UI
+    return { data: data ? [...data].reverse() : data, error, count, hasMore: (count ?? 0) > to + 1 };
   },
 
   send: async (rideId: string, senderId: string, body: string) => {

@@ -2,11 +2,13 @@
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Alert, ScrollView,
+  Alert, ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { authService } from '../../lib/auth';
 import { useAuthStore } from '../../store/authStore';
+import Button from '../../components/Button';
+import { validate, firstError } from '../../lib/validation';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -17,14 +19,11 @@ export default function LoginScreen() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
 
   const handleSubmit = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
-      return;
-    }
+    const err = firstError(
+      validate.email(email),
+      validate.password(password),
+    );
+    if (err) { Alert.alert('Invalid Input', err); return; }
 
     setLoading(true);
     try {
@@ -101,19 +100,12 @@ export default function LoginScreen() {
             placeholderTextColor="#999"
           />
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
+          <Button
+            label={mode === 'signin' ? 'Sign In' : 'Sign Up'}
             onPress={handleSubmit}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>
-                {mode === 'signin' ? 'Sign In' : 'Sign Up'}
-              </Text>
-            )}
-          </TouchableOpacity>
+            loading={loading}
+            style={{ marginTop: 4 }}
+          />
 
           <TouchableOpacity
             style={styles.switchMode}
@@ -160,15 +152,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa',
     color: '#111',
   },
-  button: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
   switchMode: { alignItems: 'center', marginTop: 20 },
   switchModeText: { color: '#007AFF', fontSize: 15 },
 });

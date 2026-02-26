@@ -6,56 +6,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { rideService } from "../../lib/api";
+import { rideService, PAGE_SIZE } from "../../lib/api";
 import { useRideStore } from "../../store/rideStore";
 import { useAuthStore } from "../../store/authStore";
 import { getCoords } from "../../lib/places";
 import PlaceAutocomplete from "../../components/PlaceAutocomplete";
+import RideCard, { RideCardSkeleton } from "../../components/RideCard";
 import type { MUPlace } from "../../lib/places";
-
-function RideCard({ ride, onPress }: { ride: any; onPress: () => void }) {
-  const dep = new Date(ride.departure_time);
-  const fmtDate = dep.toLocaleDateString("en-MU", { weekday: "short", day: "numeric", month: "short" });
-  const fmtTime = dep.toLocaleTimeString("en-MU", { hour: "2-digit", minute: "2-digit" });
-
-  return (
-    <TouchableOpacity style={s.card} onPress={onPress} activeOpacity={0.85}>
-      <View style={s.cardHeader}>
-        <View style={s.avatar}>
-          <Text style={s.avatarText}>{(ride.driver?.full_name || "?")[0].toUpperCase()}</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={s.driverName}>{ride.driver?.full_name || "Driver"}</Text>
-          <Text style={s.driverRating}>
-            {ride.driver?.rating_avg > 0 ? "⭐ " + ride.driver.rating_avg : "New driver"}
-          </Text>
-        </View>
-        <View style={s.pricePill}>
-          <Text style={s.priceText}>
-            {ride.price_per_seat ? "MUR " + ride.price_per_seat : "Free"}
-          </Text>
-        </View>
-      </View>
-
-      <View style={s.route}>
-        <View style={s.routePoint}>
-          <View style={[s.dot, { backgroundColor: "#34C759" }]} />
-          <Text style={s.routeText} numberOfLines={1}>{ride.origin_address}</Text>
-        </View>
-        <View style={s.routeLine} />
-        <View style={s.routePoint}>
-          <View style={[s.dot, { backgroundColor: "#FF3B30" }]} />
-          <Text style={s.routeText} numberOfLines={1}>{ride.destination_address}</Text>
-        </View>
-      </View>
-
-      <View style={s.cardFooter}>
-        <Text style={s.meta}>{fmtDate} at {fmtTime}</Text>
-        <Text style={s.meta}>{ride.seats_available} seat{ride.seats_available !== 1 ? "s" : ""} left</Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
 
 export default function SearchScreen() {
   const router = useRouter();
@@ -70,24 +27,29 @@ export default function SearchScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
 
   const fmtDate = (d: Date) =>
     d.toLocaleDateString("en-MU", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 
-  const handleSearch = async () => {
-    setLoading(true);
-    setSearched(true);
+  const doSearch = async (pageNum: number, append = false) => {
+    if (pageNum === 0) { setLoading(true); setSearched(true); }
+    else setLoadingMore(true);
+
     try {
       const oc = originCoords ?? (origin.trim() ? getCoords(origin) : { lat: -20.2, lng: 57.5 });
       const dc = destinationCoords ?? (destination.trim() ? getCoords(destination) : { lat: -20.2, lng: 57.5 });
 
-      const { data, error } = await rideService.search({
+      const { data, error, hasMore: more } = await rideService.search({
         origin_lat: oc.lat,
         origin_lng: oc.lng,
         destination_lat: dc.lat,
         destination_lng: dc.lng,
         date: date.toISOString(),
+        page: pageNum,
       });
       if (error) throw error;
       const filtered = (data || []).filter((r: any) =>
@@ -95,14 +57,21 @@ export default function SearchScreen() {
         (!origin.trim() || r.origin_address.toLowerCase().includes(origin.toLowerCase())) &&
         (!destination.trim() || r.destination_address.toLowerCase().includes(destination.toLowerCase()))
       );
-      setResults(filtered);
-      setRides(filtered);
+      const next = append ? [...results, ...filtered] : filtered;
+      setResults(next);
+      setRides(next);
+      setHasMore(more ?? false);
+      setPage(pageNum);
     } catch (err: any) {
       Alert.alert("Error", err.message);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
+
+  const handleSearch = () => doSearch(0, false);
+  const handleLoadMore = () => { if (!loadingMore && hasMore) doSearch(page + 1, true); };
 
   return (
     <SafeAreaView style={s.container}>
@@ -167,30 +136,47 @@ export default function SearchScreen() {
         </Text>
       )}
 
-      <FlatList
-        data={results}
-        keyExtractor={item => item.id}
-        contentContainerStyle={{ padding: 16, paddingTop: 8 }}
-        keyboardShouldPersistTaps="handled"
-        renderItem={({ item }) => (
-          <RideCard
-            ride={item}
-            onPress={() => {
-              setCurrentRide(item);
-              router.push(`/(app)/ride/${item.id}` as any);
-            }}
-          />
-        )}
-        ListEmptyComponent={
-          searched && !loading ? (
-            <View style={s.empty}>
-              <Text style={s.emptyEmoji}>🔍</Text>
-              <Text style={s.emptyText}>No rides available</Text>
-              <Text style={s.emptySub}>Try a different date or location</Text>
-            </View>
-          ) : null
-        }
-      />
+      {loading ? (
+        <View style={{ padding: 16 }}>
+          {[0, 1, 2].map(i => <RideCardSkeleton key={i} />)}
+        </View>
+      ) : (
+        <FlatList
+          data={results}
+          keyExtractor={item => item.id}
+          contentContainerStyle={{ padding: 16, paddingTop: 8 }}
+          keyboardShouldPersistTaps="handled"
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.4}
+          renderItem={({ item }) => (
+            <RideCard
+              ride={item}
+              onPress={() => {
+                setCurrentRide(item);
+                router.push(`/(app)/ride/${item.id}` as any);
+              }}
+            />
+          )}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator color="#007AFF" style={{ marginVertical: 16 }} />
+            ) : hasMore ? (
+              <TouchableOpacity style={s.loadMoreBtn} onPress={handleLoadMore}>
+                <Text style={s.loadMoreText}>Load more rides</Text>
+              </TouchableOpacity>
+            ) : null
+          }
+          ListEmptyComponent={
+            searched ? (
+              <View style={s.empty}>
+                <Text style={s.emptyEmoji}>🔍</Text>
+                <Text style={s.emptyText}>No rides available</Text>
+                <Text style={s.emptySub}>Try a different date or location</Text>
+              </View>
+            ) : null
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -217,24 +203,11 @@ const s = StyleSheet.create({
   btn: { backgroundColor: "#007AFF", padding: 14, borderRadius: 10, alignItems: "center" },
   btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   resultCount: { paddingHorizontal: 16, paddingVertical: 8, fontSize: 14, color: "#666", fontWeight: "600" },
-  card: {
-    backgroundColor: "#fff", borderRadius: 14, padding: 16, marginBottom: 12,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
+  loadMoreBtn: {
+    alignItems: "center", padding: 14, marginBottom: 16,
+    borderWidth: 1, borderColor: "#c8e0ff", borderRadius: 10, marginHorizontal: 16,
   },
-  cardHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#007AFF", justifyContent: "center", alignItems: "center", marginRight: 10 },
-  avatarText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
-  driverName: { fontSize: 15, fontWeight: "700", color: "#111" },
-  driverRating: { fontSize: 13, color: "#666" },
-  pricePill: { backgroundColor: "#e8f4fd", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  priceText: { fontSize: 13, fontWeight: "700", color: "#007AFF" },
-  route: { marginBottom: 12 },
-  routePoint: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
-  dot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
-  routeText: { fontSize: 14, color: "#333", flex: 1 },
-  routeLine: { width: 2, height: 10, backgroundColor: "#ddd", marginLeft: 4, marginBottom: 4 },
-  cardFooter: { flexDirection: "row", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: "#f0f0f0", paddingTop: 10 },
-  meta: { fontSize: 13, color: "#888" },
+  loadMoreText: { color: "#007AFF", fontWeight: "600", fontSize: 14 },
   empty: { alignItems: "center", paddingTop: 48 },
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
   emptyText: { fontSize: 17, fontWeight: "600", color: "#444" },

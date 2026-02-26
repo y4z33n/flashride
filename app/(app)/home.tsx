@@ -1,10 +1,11 @@
 ﻿import { useEffect, useState, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useAuthStore } from "../../store/authStore";
 import { useRideStore } from "../../store/rideStore";
 import { rideService, requestService } from "../../lib/api";
+import SkeletonLoader from "../../components/SkeletonLoader";
 
 export default function HomeScreen() {
   const { profile, session } = useAuthStore();
@@ -57,7 +58,18 @@ export default function HomeScreen() {
         </View>
 
         {loading ? (
-          <ActivityIndicator style={{ marginTop: 32 }} color="#007AFF" />
+          <View>
+            {[0, 1, 2].map(i => (
+              <View key={i} style={s.rowCard}>
+                <View style={{ flex: 1, gap: 8 }}>
+                  <SkeletonLoader width="70%" height={14} />
+                  <SkeletonLoader width="50%" height={12} />
+                  <SkeletonLoader width="60%" height={12} />
+                </View>
+                <SkeletonLoader width={10} height={10} borderRadius={5} />
+              </View>
+            ))}
+          </View>
         ) : (
           <>
             {/* My active rides (as driver) */}
