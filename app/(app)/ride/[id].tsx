@@ -8,13 +8,14 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Location from "expo-location";
 import { rideService, requestService, ratingService } from "../../../lib/api";
 import { supabase } from "../../../lib/supabase";
+import { sendPushNotification } from "../../../lib/notifications";
 import { useAuthStore } from "../../../store/authStore";
 import { useRideStore } from "../../../store/rideStore";
 
 export default function RideDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { session } = useAuthStore();
+  const { session, profile } = useAuthStore();
   const { setCurrentRide, setIncomingRequests } = useRideStore();
   const [ride, setRide] = useState<any>(null);
   const [requests, setRequests] = useState<any[]>([]);
@@ -138,6 +139,13 @@ export default function RideDetailScreen() {
       });
       if (error) throw error;
       setMyRequest(data);
+      // Notify the driver
+      await sendPushNotification(
+        ride.driver_id,
+        "New Ride Request 🙋",
+        `${profile?.full_name ?? "Someone"} wants to join your ride to ${ride.destination_address.split(",")[0]}`,
+        { rideId: ride.id }
+      );
     } catch (err: any) {
       Alert.alert("Error", err.message);
     } finally {
@@ -150,6 +158,19 @@ export default function RideDetailScreen() {
     try {
       const { error } = await requestService.updateStatus(requestId, status as any);
       if (error) throw error;
+      // Notify the rider
+      const req = requests.find(r => r.id === requestId);
+      if (req) {
+        const isAccepted = status === "accepted";
+        await sendPushNotification(
+          req.rider_id,
+          isAccepted ? "Request Accepted 🎉" : "Request Declined",
+          isAccepted
+            ? `You're confirmed on the ride to ${ride.destination_address.split(",")[0]}!`
+            : `Your request for the ride to ${ride.destination_address.split(",")[0]} was declined.`,
+          { rideId: ride.id }
+        );
+      }
       await loadRide();
     } catch (err: any) {
       Alert.alert("Error", err.message);
