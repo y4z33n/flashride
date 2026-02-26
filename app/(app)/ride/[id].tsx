@@ -31,6 +31,8 @@ export default function RideDetailScreen() {
   const [ratingScore, setRatingScore] = useState(5);
   const [ratingComment, setRatingComment] = useState("");
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  // Track which userIds the current user has already rated for this ride
+  const [ratedUserIds, setRatedUserIds] = useState<Set<string>>(new Set());
 
   const isDriver = ride?.driver_id === session?.user?.id;
 
@@ -111,6 +113,13 @@ export default function RideDetailScreen() {
         const existing = (riderReqs || []).find((r: any) => r.ride_id === id);
         setMyRequest(existing ?? null);
       }
+      // Load which users this session user has already rated for this ride
+      const { data: myRatings } = await supabase
+        .from("ratings")
+        .select("rated_id")
+        .eq("ride_id", id)
+        .eq("rater_id", session!.user.id);
+      setRatedUserIds(new Set((myRatings || []).map((r: any) => r.rated_id)));
     } catch (err: any) {
       Alert.alert("Error", err.message);
     } finally {
@@ -215,6 +224,8 @@ export default function RideDetailScreen() {
         comment: ratingComment.trim() || undefined,
       });
       if (error && !error.message.includes("duplicate")) throw error;
+      // Mark this user as rated so the button disables immediately
+      setRatedUserIds(prev => new Set([...prev, ratingModal.userId]));
     } catch (err: any) {
       Alert.alert("Error", err.message);
     } finally {
@@ -379,19 +390,26 @@ export default function RideDetailScreen() {
             {ride.status === "completed" && requests.filter((r: any) => r.status === "accepted").length > 0 && (
               <View>
                 <Text style={[s.sectionTitle, { marginTop: 16 }]}>Rate Your Passengers</Text>
-                {requests.filter((r: any) => r.status === "accepted").map((req: any) => (
-                  <TouchableOpacity
-                    key={req.id}
-                    style={s.ratePassengerBtn}
-                    onPress={() => setRatingModal({ userId: req.rider_id, name: req.rider?.full_name ?? "Rider" })}
-                  >
-                    <View style={s.reqAvatar}>
-                      <Text style={s.reqAvatarText}>{(req.rider?.full_name || "?")[0].toUpperCase()}</Text>
-                    </View>
-                    <Text style={s.ratePassengerName}>{req.rider?.full_name}</Text>
-                    <Text style={s.ratePassengerArrow}>⭐ Rate →</Text>
-                  </TouchableOpacity>
-                ))}
+                {requests.filter((r: any) => r.status === "accepted").map((req: any) => {
+                  const alreadyRated = ratedUserIds.has(req.rider_id);
+                  return (
+                    <TouchableOpacity
+                      key={req.id}
+                      style={[s.ratePassengerBtn, alreadyRated && s.ratePassengerBtnDone]}
+                      onPress={() => !alreadyRated && setRatingModal({ userId: req.rider_id, name: req.rider?.full_name ?? "Rider" })}
+                      disabled={alreadyRated}
+                      activeOpacity={alreadyRated ? 1 : 0.7}
+                    >
+                      <View style={s.reqAvatar}>
+                        <Text style={s.reqAvatarText}>{(req.rider?.full_name || "?")[0].toUpperCase()}</Text>
+                      </View>
+                      <Text style={s.ratePassengerName}>{req.rider?.full_name}</Text>
+                      <Text style={[s.ratePassengerArrow, alreadyRated && { color: "#34C759" }]}>
+                        {alreadyRated ? "✅ Rated" : "⭐ Rate →"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
 
@@ -452,10 +470,14 @@ export default function RideDetailScreen() {
             {/* Completed — rider can rate driver */}
             {myRequest?.status === "accepted" && ride.status === "completed" && (
               <TouchableOpacity
-                style={s.rateBtn}
-                onPress={() => setRatingModal({ userId: ride.driver_id, name: ride.driver?.full_name ?? "Driver" })}
+                style={[s.rateBtn, ratedUserIds.has(ride.driver_id) && s.rateBtnDone]}
+                onPress={() => !ratedUserIds.has(ride.driver_id) && setRatingModal({ userId: ride.driver_id, name: ride.driver?.full_name ?? "Driver" })}
+                disabled={ratedUserIds.has(ride.driver_id)}
+                activeOpacity={ratedUserIds.has(ride.driver_id) ? 1 : 0.7}
               >
-                <Text style={s.rateBtnText}>⭐  Rate Your Driver</Text>
+                <Text style={s.rateBtnText}>
+                  {ratedUserIds.has(ride.driver_id) ? "✅  Driver Rated" : "⭐  Rate Your Driver"}
+                </Text>
               </TouchableOpacity>
             )}
 
@@ -612,6 +634,9 @@ const s = StyleSheet.create({
     backgroundColor: "#FF9F0A", padding: 14, borderRadius: 12,
     alignItems: "center", marginTop: 10,
   },
+  rateBtnDone: {
+    backgroundColor: "#34C759",
+  },
   rateBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   // Rating modal
   modalOverlay: {
@@ -646,6 +671,9 @@ const s = StyleSheet.create({
     flexDirection: "row", alignItems: "center",
     backgroundColor: "#fff", borderRadius: 12, padding: 12, marginBottom: 8,
     elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3,
+  },
+  ratePassengerBtnDone: {
+    backgroundColor: "#F0FFF4", opacity: 0.85,
   },
   ratePassengerName: { flex: 1, fontSize: 15, fontWeight: "600", color: "#111", marginLeft: 10 },
   ratePassengerArrow: { fontSize: 13, color: "#FF9F0A", fontWeight: "700" },
