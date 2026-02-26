@@ -114,17 +114,20 @@ export default function RideDetailScreen() {
     locationWatcher.current = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
       async (loc) => {
-        await supabase.from("location_updates").upsert(
-          {
-            ride_id: ride.id,
-            driver_id: session!.user.id,
-            lat: loc.coords.latitude,
-            lng: loc.coords.longitude,
-            heading: loc.coords.heading ?? null,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "ride_id" }
-        );
+        // DELETE then INSERT so Supabase Realtime fires an INSERT event
+        // (UPDATE events don't carry new values without REPLICA IDENTITY FULL)
+        await supabase
+          .from("location_updates")
+          .delete()
+          .eq("ride_id", ride.id);
+
+        await supabase.from("location_updates").insert({
+          ride_id: ride.id,
+          driver_id: session!.user.id,
+          lat: loc.coords.latitude,
+          lng: loc.coords.longitude,
+          heading: loc.coords.heading ?? null,
+        });
       }
     );
   };

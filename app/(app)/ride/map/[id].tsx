@@ -71,15 +71,14 @@ export default function LiveMapScreen() {
   };
 
   const loadLatestLocation = async () => {
+    // There is at most one row per ride_id — fetch it directly
     const { data } = await supabase
       .from('location_updates')
       .select('lat, lng, heading')
       .eq('ride_id', rideId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+      .maybeSingle();
     if (data) {
-      setDriverLocation({ lat: data.lat, lng: data.lng, heading: data.heading });
+      setDriverLocation({ lat: data.lat, lng: data.lng, heading: data.heading ?? null });
       setConnected(true);
     }
   };

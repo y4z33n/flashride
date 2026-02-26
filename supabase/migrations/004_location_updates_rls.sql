@@ -1,14 +1,11 @@
 -- ============================================================
--- FlashRide: Location Updates RLS + upsert constraint
+-- FlashRide: Location Updates RLS + realtime fix
 -- Run in: Supabase SQL Editor
 -- ============================================================
 
--- Ensure unique constraint on ride_id so upsert works (one row per ride)
-ALTER TABLE public.location_updates
-  DROP CONSTRAINT IF EXISTS location_updates_ride_id_key;
-
-ALTER TABLE public.location_updates
-  ADD CONSTRAINT location_updates_ride_id_key UNIQUE (ride_id);
+-- Set REPLICA IDENTITY FULL so UPDATE events carry new row values in realtime
+-- (required for Supabase Realtime to broadcast UPDATE payloads)
+ALTER TABLE public.location_updates REPLICA IDENTITY FULL;
 
 -- Add updated_at if missing
 ALTER TABLE public.location_updates
