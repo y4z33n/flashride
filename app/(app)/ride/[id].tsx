@@ -174,11 +174,6 @@ export default function RideDetailScreen() {
           const { error } = await rideService.updateStatus(ride.id, "completed");
           if (error) { Alert.alert("Error", error.message); return; }
           await loadRide();
-          // Prompt driver to rate each accepted rider
-          const accepted = requests.filter((r: any) => r.status === "accepted");
-          if (accepted.length > 0) {
-            setRatingModal({ userId: accepted[0].rider_id, name: accepted[0].rider?.full_name ?? "Rider" });
-          }
         },
       },
     ]);
@@ -354,6 +349,26 @@ export default function RideDetailScreen() {
               <TouchableOpacity style={s.completeBtn} onPress={handleCompleteRide}>
                 <Text style={s.completeBtnText}>✅  Mark as Completed</Text>
               </TouchableOpacity>
+            )}
+
+            {/* Rate riders — driver, after completion */}
+            {ride.status === "completed" && requests.filter((r: any) => r.status === "accepted").length > 0 && (
+              <View>
+                <Text style={[s.sectionTitle, { marginTop: 16 }]}>Rate Your Passengers</Text>
+                {requests.filter((r: any) => r.status === "accepted").map((req: any) => (
+                  <TouchableOpacity
+                    key={req.id}
+                    style={s.ratePassengerBtn}
+                    onPress={() => setRatingModal({ userId: req.rider_id, name: req.rider?.full_name ?? "Rider" })}
+                  >
+                    <View style={s.reqAvatar}>
+                      <Text style={s.reqAvatarText}>{(req.rider?.full_name || "?")[0].toUpperCase()}</Text>
+                    </View>
+                    <Text style={s.ratePassengerName}>{req.rider?.full_name}</Text>
+                    <Text style={s.ratePassengerArrow}>⭐ Rate →</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             )}
 
             <TouchableOpacity style={s.cancelBtn} onPress={handleCancelRide}>
@@ -603,4 +618,11 @@ const s = StyleSheet.create({
     borderRadius: 12, alignItems: "center",
   },
   modalSubmitText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  ratePassengerBtn: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#fff", borderRadius: 12, padding: 12, marginBottom: 8,
+    elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3,
+  },
+  ratePassengerName: { flex: 1, fontSize: 15, fontWeight: "600", color: "#111", marginLeft: 10 },
+  ratePassengerArrow: { fontSize: 13, color: "#FF9F0A", fontWeight: "700" },
 });

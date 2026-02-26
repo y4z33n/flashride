@@ -31,7 +31,9 @@ export default function HomeScreen() {
   const onRefresh = () => { setRefreshing(true); load(); };
 
   const activeRides = myRides.filter(r => ["open","full","in_progress"].includes(r.status)).slice(0, 3);
+  const completedRides = myRides.filter(r => r.status === "completed").slice(0, 5);
   const activeReqs = myRequests.filter(r => ["pending", "accepted"].includes(r.status)).slice(0, 5);
+  const completedReqs = myRequests.filter(r => r.status === "accepted" && r.ride?.status === "completed").slice(0, 5);
 
   return (
     <SafeAreaView style={s.container}>
@@ -61,14 +63,14 @@ export default function HomeScreen() {
             {/* My active rides (as driver) */}
             {activeRides.length > 0 && (
               <View style={s.section}>
-                <Text style={s.sectionTitle}>My Rides (Driver)</Text>
+                <Text style={s.sectionTitle}>My Active Rides</Text>
                 {activeRides.map(ride => (
                   <RideRow key={ride.id} ride={ride} onPress={() => { setCurrentRide(ride); router.push(`/(app)/ride/${ride.id}` as any); }} />
                 ))}
               </View>
             )}
 
-            {/* My requests as rider (pending + accepted) */}
+            {/* My requests as rider (pending + accepted active) */}
             {activeReqs.length > 0 && (
               <View style={s.section}>
                 <Text style={s.sectionTitle}>My Ride Requests</Text>
@@ -78,7 +80,27 @@ export default function HomeScreen() {
               </View>
             )}
 
-            {activeRides.length === 0 && activeReqs.length === 0 && (
+            {/* Completed rides (driver) */}
+            {completedRides.length > 0 && (
+              <View style={s.section}>
+                <Text style={s.sectionTitle}>Completed Rides</Text>
+                {completedRides.map(ride => (
+                  <RideRow key={ride.id} ride={ride} onPress={() => { setCurrentRide(ride); router.push(`/(app)/ride/${ride.id}` as any); }} />
+                ))}
+              </View>
+            )}
+
+            {/* Completed rides (rider) */}
+            {completedReqs.length > 0 && (
+              <View style={s.section}>
+                <Text style={s.sectionTitle}>Past Rides</Text>
+                {completedReqs.map((req: any) => (
+                  <RequestRow key={req.id} req={req} onPress={() => router.push(`/(app)/ride/${req.ride_id}` as any)} />
+                ))}
+              </View>
+            )}
+
+            {activeRides.length === 0 && activeReqs.length === 0 && completedRides.length === 0 && completedReqs.length === 0 && (
               <View style={s.empty}>
                 <Text style={s.emptyEmoji}>🗺️</Text>
                 <Text style={s.emptyTitle}>No activity yet</Text>
@@ -115,18 +137,22 @@ function RequestRow({ req, onPress }: { req: any; onPress: () => void }) {
   const dep = req.ride?.departure_time
     ? new Date(req.ride.departure_time).toLocaleDateString("en-MU", { weekday: "short", day: "numeric", month: "short" })
     : "";
+  const rideStatus = req.ride?.status;
+  const isCompleted = rideStatus === "completed";
   const isAccepted = req.status === "accepted";
+
+  const dotColor = isCompleted ? "#8E8E93" : isAccepted ? "#34C759" : "#FF9500";
+  const label = isCompleted ? "✅ Completed" : isAccepted ? "✅ Accepted" : "⏳ Awaiting driver";
+
   return (
     <TouchableOpacity style={s.rowCard} onPress={onPress} activeOpacity={0.8}>
       <View style={{ flex: 1 }}>
         <Text style={s.rowFrom} numberOfLines={1}>{req.ride?.origin_address ?? "..."}</Text>
         <Text style={s.rowArrow}>to</Text>
         <Text style={s.rowTo} numberOfLines={1}>{req.ride?.destination_address ?? "..."}</Text>
-        <Text style={s.rowMeta}>
-          {dep}  •  {isAccepted ? "✅ Accepted" : "⏳ Awaiting driver"}
-        </Text>
+        <Text style={s.rowMeta}>{dep}  •  {label}</Text>
       </View>
-      <View style={[s.statusDot, { backgroundColor: isAccepted ? "#34C759" : "#FF9500" }]} />
+      <View style={[s.statusDot, { backgroundColor: dotColor }]} />
     </TouchableOpacity>
   );
 }
