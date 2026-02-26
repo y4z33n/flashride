@@ -15,6 +15,10 @@ CREATE TABLE IF NOT EXISTS public.push_tokens (
 
 ALTER TABLE public.push_tokens ENABLE ROW LEVEL SECURITY;
 
+-- Drop policies first so re-running is safe
+DROP POLICY IF EXISTS "push_tokens_own" ON public.push_tokens;
+DROP POLICY IF EXISTS "push_tokens_service_read" ON public.push_tokens;
+
 -- Users can only manage their own tokens
 CREATE POLICY "push_tokens_own" ON public.push_tokens
   FOR ALL USING (auth.uid() = user_id);
@@ -35,6 +39,11 @@ VALUES ('avatars', 'avatars', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Allow authenticated users to upload their own avatar
+DROP POLICY IF EXISTS "avatars_upload" ON storage.objects;
+DROP POLICY IF EXISTS "avatars_public_read" ON storage.objects;
+DROP POLICY IF EXISTS "avatars_owner_update" ON storage.objects;
+DROP POLICY IF EXISTS "avatars_owner_delete" ON storage.objects;
+
 CREATE POLICY "avatars_upload" ON storage.objects
   FOR INSERT WITH CHECK (
     bucket_id = 'avatars' AND
