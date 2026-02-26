@@ -16,6 +16,7 @@ export default function AppLayout() {
       <Tabs.Screen name="index" options={{ href: null }} />
       {/* Hide dynamic routes from the tab bar */}
       <Tabs.Screen name="ride/[id]" options={{ href: null }} />
+      <Tabs.Screen name="ride/map/[id]" options={{ href: null }} />
       <Tabs.Screen name="chat/[id]" options={{ href: null }} />
       <Tabs.Screen
         name="session-viewer"

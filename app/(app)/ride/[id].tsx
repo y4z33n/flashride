@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, Switch,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as Location from "expo-location";
 import { rideService, requestService } from "../../../lib/api";
+import { supabase } from "../../../lib/supabase";
 import { useAuthStore } from "../../../store/authStore";
 import { useRideStore } from "../../../store/rideStore";
 
@@ -20,9 +22,20 @@ export default function RideDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  // Location sharing (driver only)
+  const [sharingLocation, setSharingLocation] = useState(false);
+  const locationWatcher = useRef<Location.LocationSubscription | null>(null);
+
   const isDriver = ride?.driver_id === session?.user?.id;
 
   useEffect(() => { loadRide(); }, [id]);
+
+  // Stop sharing on unmount
+  useEffect(() => {
+    return () => {
+      locationWatcher.current?.remove();
+    };
+  }, []);
 
   const loadRide = async () => {
     setLoading(true);
@@ -77,6 +90,43 @@ export default function RideDetailScreen() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const handleToggleLocation = async () => {
+    if (sharingLocation) {
+      // Stop sharing
+      locationWatcher.current?.remove();
+      locationWatcher.current = null;
+      setSharingLocation(false);
+      return;
+    }
+
+    // Request permission
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Denied", "Location permission is needed to share your position.");
+      return;
+    }
+
+    setSharingLocation(true);
+
+    // Start watching position
+    locationWatcher.current = await Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
+      async (loc) => {
+        await supabase.from("location_updates").upsert(
+          {
+            ride_id: ride.id,
+            driver_id: session!.user.id,
+            lat: loc.coords.latitude,
+            lng: loc.coords.longitude,
+            heading: loc.coords.heading ?? null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "ride_id" }
+        );
+      }
+    );
   };
 
   const handleCancelRide = () => {
@@ -225,6 +275,24 @@ export default function RideDetailScreen() {
             <TouchableOpacity style={s.cancelBtn} onPress={handleCancelRide}>
               <Text style={s.cancelBtnText}>Cancel This Ride</Text>
             </TouchableOpacity>
+
+            {/* Location sharing toggle */}
+            <View style={s.locationCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.locationTitle}>
+                  {sharingLocation ? "📡 Sharing Location" : "📍 Share My Location"}
+                </Text>
+                <Text style={s.locationSub}>
+                  {sharingLocation ? "Passengers can see you live" : "Let passengers track you"}
+                </Text>
+              </View>
+              <Switch
+                value={sharingLocation}
+                onValueChange={handleToggleLocation}
+                trackColor={{ false: "#ddd", true: "#34C75980" }}
+                thumbColor={sharingLocation ? "#34C759" : "#fff"}
+              />
+            </View>
           </View>
         )}
 
@@ -256,6 +324,16 @@ export default function RideDetailScreen() {
               <View style={[s.requestedBanner, { backgroundColor: "#34C75920" }]}>
                 <Text style={[s.requestedText, { color: "#34C759" }]}>✅  You're on this ride!</Text>
               </View>
+            )}
+
+            {/* Track driver map button — accepted riders only */}
+            {myRequest?.status === "accepted" && (
+              <TouchableOpacity
+                style={s.trackBtn}
+                onPress={() => router.push(`/(app)/ride/map/${ride.id}` as any)}
+              >
+                <Text style={s.trackBtnText}>🗺️  Track Driver Live</Text>
+              </TouchableOpacity>
             )}
 
             {/* Rejected */}
@@ -336,4 +414,16 @@ const s = StyleSheet.create({
     alignItems: "center", marginBottom: 16, flexDirection: "row", justifyContent: "center",
   },
   chatBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  locationCard: {
+    backgroundColor: "#fff", borderRadius: 12, padding: 14, marginTop: 12,
+    flexDirection: "row", alignItems: "center",
+    elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3,
+  },
+  locationTitle: { fontSize: 15, fontWeight: "700", color: "#111" },
+  locationSub: { fontSize: 12, color: "#888", marginTop: 2 },
+  trackBtn: {
+    backgroundColor: "#FF9500", padding: 14, borderRadius: 12,
+    alignItems: "center", marginTop: 10,
+  },
+  trackBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });
