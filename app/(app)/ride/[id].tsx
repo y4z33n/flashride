@@ -8,7 +8,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Location from "expo-location";
 import { rideService, requestService, ratingService } from "../../../lib/api";
 import { supabase } from "../../../lib/supabase";
-import { sendPushNotification } from "../../../lib/notifications";
 import { useAuthStore } from "../../../store/authStore";
 import { useRideStore } from "../../../store/rideStore";
 
@@ -134,13 +133,7 @@ export default function RideDetailScreen() {
       const { data, error } = await requestService.create(ride.id, 1);
       if (error) throw error;
       setMyRequest(data as any);
-      // Notify the driver
-      await sendPushNotification(
-        ride.driver_id,
-        "New Ride Request 🙋",
-        `${profile?.full_name ?? "Someone"} wants to join your ride to ${ride.destination_address.split(",")[0]}`,
-        { rideId: ride.id }
-      );
+      // Push notification sent server-side automatically
     } catch (err: any) {
       Alert.alert("Error", err.message);
     } finally {
@@ -158,19 +151,7 @@ export default function RideDetailScreen() {
         const { error } = await requestService.reject(requestId);
         if (error) throw error;
       }
-      // Notify the rider
-      const req = requests.find(r => r.id === requestId);
-      if (req) {
-        const isAccepted = status === "accepted";
-        await sendPushNotification(
-          req.rider_id,
-          isAccepted ? "Request Accepted 🎉" : "Request Declined",
-          isAccepted
-            ? `You're confirmed on the ride to ${ride.destination_address.split(",")[0]}!`
-            : `Your request for the ride to ${ride.destination_address.split(",")[0]} was declined.`,
-          { rideId: ride.id }
-        );
-      }
+      // Push notification sent server-side automatically on accept/reject
       await loadRide();
     } catch (err: any) {
       Alert.alert("Error", err.message);

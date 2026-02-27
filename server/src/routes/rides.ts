@@ -7,8 +7,22 @@ import { rideService } from '../services/rideService';
 import { messageService } from '../services/messageService';
 import { locationService } from '../services/locationService';
 import { auditService } from '../services/auditService';
+import { pushService } from '../services/pushService';
+import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router();
+
+// ── Helpers ───────────────────────────────────────────────────────────
+
+/** Returns all accepted rider IDs for a ride (for broadcast notifications). */
+async function getAcceptedRiderIds(rideId: string): Promise<string[]> {
+  const { data } = await supabaseAdmin
+    .from('ride_requests')
+    .select('rider_id')
+    .eq('ride_id', rideId)
+    .eq('status', 'accepted');
+  return (data ?? []).map((r: { rider_id: string }) => r.rider_id);
+}
 
 // ── Validation schemas ────────────────────────────────────────────────
 
@@ -158,6 +172,18 @@ router.post(
         ipAddress: req.ip,
       });
 
+      // Notify all accepted riders the ride has started (fire-and-forget)
+      getAcceptedRiderIds(ride.id).then(riderIds => {
+        if (riderIds.length === 0) return;
+        const dest = ride.destination_address.split(',')[0];
+        pushService.sendToUsers(
+          riderIds,
+          'Your Ride Has Started 🚗',
+          `Head to the pickup point — your ride to ${dest} is on the way!`,
+          { rideId: ride.id }
+        );
+      });
+
       res.status(200).json(ride);
     } catch (err) {
       next(createError((err as Error).message, 400, 'START_FAILED'));
@@ -186,6 +212,18 @@ router.post(
         ipAddress: req.ip,
       });
 
+      // Prompt all riders to leave a rating (fire-and-forget)
+      getAcceptedRiderIds(ride.id).then(riderIds => {
+        if (riderIds.length === 0) return;
+        const dest = ride.destination_address.split(',')[0];
+        pushService.sendToUsers(
+          riderIds,
+          'Ride Complete! ⭐',
+          `How was your ride to ${dest}? Tap to leave a rating.`,
+          { rideId: ride.id, action: 'rate' }
+        );
+      });
+
       res.status(200).json(ride);
     } catch (err) {
       next(createError((err as Error).message, 400, 'COMPLETE_FAILED'));
@@ -212,6 +250,18 @@ router.post(
         entityType: 'ride',
         entityId: ride.id,
         ipAddress: req.ip,
+      });
+
+      // Notify all accepted riders the ride was cancelled (fire-and-forget)
+      getAcceptedRiderIds(ride.id).then(riderIds => {
+        if (riderIds.length === 0) return;
+        const dest = ride.destination_address.split(',')[0];
+        pushService.sendToUsers(
+          riderIds,
+          'Ride Cancelled 😔',
+          `Your ride to ${dest} has been cancelled by the driver.`,
+          { rideId: ride.id }
+        );
       });
 
       res.status(200).json(ride);

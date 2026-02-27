@@ -4,6 +4,8 @@ import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { strictLimiter } from '../middleware/rateLimiter';
 import { rideRequestService } from '../services/rideRequestService';
 import { auditService } from '../services/auditService';
+import { pushService } from '../services/pushService';
+import { supabaseAdmin } from '../lib/supabase';
 import { createError } from '../middleware/errorHandler';
 
 const router = Router();
@@ -63,6 +65,32 @@ router.post(
         ipAddress: req.ip,
       });
 
+      // Notify the driver (fire-and-forget — never delays the response)
+      supabaseAdmin
+        .from('rides')
+        .select('driver_id, destination_address, profiles!driver_id(full_name)')
+        .eq('id', rideId)
+        .single()
+        .then(({ data: ride }) => {
+          if (!ride) return;
+          // Get rider name for the notification
+          supabaseAdmin
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .single()
+            .then(({ data: riderProfile }) => {
+              const riderName = riderProfile?.full_name ?? 'Someone';
+              const dest = ride.destination_address.split(',')[0];
+              pushService.sendToUser(
+                ride.driver_id,
+                'New Ride Request 🙋',
+                `${riderName} wants to join your ride to ${dest}`,
+                { rideId, requestId: result.request_id }
+              );
+            });
+        });
+
       res.status(201).json(result);
     } catch (err) {
       next(err);
@@ -103,6 +131,23 @@ router.post(
         ipAddress: req.ip,
       });
 
+      // Notify the rider their request was accepted (fire-and-forget)
+      supabaseAdmin
+        .from('ride_requests')
+        .select('rider_id, rides!inner(destination_address)')
+        .eq('id', requestId)
+        .single()
+        .then(({ data: req }) => {
+          if (!req) return;
+          const dest = (req.rides as any).destination_address.split(',')[0];
+          pushService.sendToUser(
+            req.rider_id,
+            'Request Accepted 🎉',
+            `You're confirmed on the ride to ${dest}!`,
+            { rideId: result.ride_id, requestId }
+          );
+        });
+
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -132,6 +177,23 @@ router.post(
         entityId: requestId,
         ipAddress: req.ip,
       });
+
+      // Notify the rider their request was declined (fire-and-forget)
+      supabaseAdmin
+        .from('ride_requests')
+        .select('rider_id, rides!inner(destination_address)')
+        .eq('id', requestId)
+        .single()
+        .then(({ data: req }) => {
+          if (!req) return;
+          const dest = (req.rides as any).destination_address.split(',')[0];
+          pushService.sendToUser(
+            req.rider_id,
+            'Request Declined',
+            `Your request for the ride to ${dest} was declined.`,
+            { requestId }
+          );
+        });
 
       res.status(200).json({ success: true, message: 'Request rejected.' });
     } catch (err) {
