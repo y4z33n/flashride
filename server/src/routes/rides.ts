@@ -1,14 +1,21 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { z } from 'zod';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { strictLimiter } from '../middleware/rateLimiter';
-import { createError } from '../middleware/errorHandler';
+import { createError, parseBody, parseQuery } from '../middleware/errorHandler';
 import { rideService } from '../services/rideService';
 import { messageService } from '../services/messageService';
 import { locationService } from '../services/locationService';
 import { auditService } from '../services/auditService';
 import { pushService } from '../services/pushService';
 import { supabaseAdmin } from '../lib/supabase';
+import {
+  createRideSchema,
+  searchRideSchema,
+  sendMessageSchema,
+  locationSchema,
+  messagesQuerySchema,
+  uuidParam,
+} from '../lib/schemas';
 
 const router = Router();
 
@@ -24,45 +31,20 @@ async function getAcceptedRiderIds(rideId: string): Promise<string[]> {
   return (data ?? []).map((r: { rider_id: string }) => r.rider_id);
 }
 
-// ── Validation schemas ────────────────────────────────────────────────
+/** Validate a UUID path param — returns false and calls next(400) if invalid. */
+function validateId(id: string, next: NextFunction): boolean {
+  if (!uuidParam.safeParse(id).success) {
+    next(createError('Invalid ID — must be a valid UUID.', 400, 'INVALID_ID'));
+    return false;
+  }
+  return true;
+}
 
-const createRideSchema = z.object({
-  origin_address:       z.string().min(3).max(300),
-  origin_lat:           z.number().min(-90).max(90),
-  origin_lng:           z.number().min(-180).max(180),
-  destination_address:  z.string().min(3).max(300),
-  destination_lat:      z.number().min(-90).max(90),
-  destination_lng:      z.number().min(-180).max(180),
-  departure_time:       z.string().datetime({ message: 'departure_time must be a valid ISO 8601 datetime' }),
-  seats_total:          z.number().int().min(1).max(8),
-  price_per_seat:       z.number().min(0).nullable().optional(),
-  notes:                z.string().max(500).nullable().optional(),
-});
-
-const searchRideSchema = z.object({
-  date:             z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
-  origin_lat:       z.coerce.number().min(-90).max(90).optional(),
-  origin_lng:       z.coerce.number().min(-180).max(180).optional(),
-  destination_lat:  z.coerce.number().min(-90).max(90).optional(),
-  destination_lng:  z.coerce.number().min(-180).max(180).optional(),
-  page:             z.coerce.number().int().min(0).default(0),
-});
-
-const sendMessageSchema = z.object({
-  body: z.string().min(1).max(1000),
-});
-
-const locationSchema = z.object({
-  lat:     z.number().min(-90).max(90),
-  lng:     z.number().min(-180).max(180),
-  heading: z.number().min(0).max(360).nullable().optional(),
-});
-
-// ── Rides CRUD ────────────────────────────────────────────────────────
+// ── Rides ─────────────────────────────────────────────────────────────
 
 /**
  * POST /rides
- * Offer a new ride. driver_id is taken from JWT — never from body.
+ * Offer a new ride. driver_id is always taken from JWT — never from body.
  */
 router.post(
   '/rides',
@@ -72,17 +54,14 @@ router.post(
     try {
       const { user } = req as AuthenticatedRequest;
 
-      const parsed = createRideSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return next(createError('Validation failed.', 400, 'VALIDATION_ERROR'));
-      }
+      const body = parseBody(createRideSchema, req.body, next);
+      if (!body) return;
 
-      // Departure time must be in the future
-      if (new Date(parsed.data.departure_time) <= new Date()) {
+      if (new Date(body.departure_time) <= new Date()) {
         return next(createError('departure_time must be in the future.', 400, 'INVALID_DEPARTURE_TIME'));
       }
 
-      const ride = await rideService.create(user.id, parsed.data);
+      const ride = await rideService.create(user.id, body);
 
       auditService.logEvent({
         actorId: user.id,
@@ -102,24 +81,18 @@ router.post(
 
 /**
  * GET /rides/search
- * Search available rides by date (and optionally coordinates).
+ * Search open rides by date (and optionally proximity).
+ * Defined before /rides/:id to avoid route shadowing.
  */
 router.get(
   '/rides/search',
   requireAuth,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const parsed = searchRideSchema.safeParse(req.query);
-      if (!parsed.success) {
-        res.status(400).json({
-          error: 'Validation Error',
-          message: 'Invalid query parameters.',
-          details: parsed.error.flatten().fieldErrors,
-        });
-        return;
-      }
+      const query = parseQuery(searchRideSchema, req.query, next);
+      if (!query) return;
 
-      const result = await rideService.search(parsed.data);
+      const result = await rideService.search(query);
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -136,12 +109,11 @@ router.get(
   requireAuth,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!validateId(req.params.id, next)) return;
       const { accessToken } = req as AuthenticatedRequest;
       const ride = await rideService.getById(req.params.id, accessToken);
 
-      if (!ride) {
-        return next(createError('Ride not found.', 404, 'NOT_FOUND'));
-      }
+      if (!ride) return next(createError('Ride not found.', 404, 'NOT_FOUND'));
 
       res.status(200).json(ride);
     } catch (err) {
@@ -160,25 +132,22 @@ router.post(
   strictLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!validateId(req.params.id, next)) return;
       const { user } = req as AuthenticatedRequest;
       const ride = await rideService.start(req.params.id, user.id);
 
       auditService.logEvent({
         actorId: user.id,
-        action: 'ride.created',
+        action: 'ride.started',
         entityType: 'ride',
         entityId: ride.id,
-        metadata: { status: 'in_progress' },
         ipAddress: req.ip,
       });
 
-      // Notify all accepted riders the ride has started (fire-and-forget)
       getAcceptedRiderIds(ride.id).then(riderIds => {
         if (riderIds.length === 0) return;
         const dest = ride.destination_address.split(',')[0];
-        pushService.sendToUsers(
-          riderIds,
-          'Your Ride Has Started 🚗',
+        pushService.sendToUsers(riderIds, 'Your Ride Has Started 🚗',
           `Head to the pickup point — your ride to ${dest} is on the way!`,
           { rideId: ride.id }
         );
@@ -201,6 +170,7 @@ router.post(
   strictLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!validateId(req.params.id, next)) return;
       const { user } = req as AuthenticatedRequest;
       const ride = await rideService.complete(req.params.id, user.id);
 
@@ -212,13 +182,10 @@ router.post(
         ipAddress: req.ip,
       });
 
-      // Prompt all riders to leave a rating (fire-and-forget)
       getAcceptedRiderIds(ride.id).then(riderIds => {
         if (riderIds.length === 0) return;
         const dest = ride.destination_address.split(',')[0];
-        pushService.sendToUsers(
-          riderIds,
-          'Ride Complete! ⭐',
+        pushService.sendToUsers(riderIds, 'Ride Complete! ⭐',
           `How was your ride to ${dest}? Tap to leave a rating.`,
           { rideId: ride.id, action: 'rate' }
         );
@@ -241,6 +208,7 @@ router.post(
   strictLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!validateId(req.params.id, next)) return;
       const { user } = req as AuthenticatedRequest;
       const ride = await rideService.cancel(req.params.id, user.id);
 
@@ -252,13 +220,10 @@ router.post(
         ipAddress: req.ip,
       });
 
-      // Notify all accepted riders the ride was cancelled (fire-and-forget)
       getAcceptedRiderIds(ride.id).then(riderIds => {
         if (riderIds.length === 0) return;
         const dest = ride.destination_address.split(',')[0];
-        pushService.sendToUsers(
-          riderIds,
-          'Ride Cancelled 😔',
+        pushService.sendToUsers(riderIds, 'Ride Cancelled 😔',
           `Your ride to ${dest} has been cancelled by the driver.`,
           { rideId: ride.id }
         );
@@ -282,23 +247,14 @@ router.post(
   requireAuth,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!validateId(req.params.id, next)) return;
       const { user } = req as AuthenticatedRequest;
 
-      const parsed = locationSchema.safeParse(req.body);
-      if (!parsed.success) {
-        res.status(400).json({
-          error: 'Validation Error',
-          details: parsed.error.flatten().fieldErrors,
-        });
-        return;
-      }
+      const body = parseBody(locationSchema, req.body, next);
+      if (!body) return;
 
       const update = await locationService.upsert(
-        req.params.id,
-        user.id,
-        parsed.data.lat,
-        parsed.data.lng,
-        parsed.data.heading
+        req.params.id, user.id, body.lat, body.lng, body.heading
       );
 
       res.status(201).json(update);
@@ -317,15 +273,10 @@ router.get(
   requireAuth,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!validateId(req.params.id, next)) return;
       const { accessToken } = req as AuthenticatedRequest;
       const location = await locationService.getLatest(req.params.id, accessToken);
-
-      if (!location) {
-        res.status(200).json({ location: null });
-        return;
-      }
-
-      res.status(200).json(location);
+      res.status(200).json(location ?? { location: null });
     } catch (err) {
       next(err);
     }
@@ -343,10 +294,13 @@ router.get(
   requireAuth,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!validateId(req.params.id, next)) return;
       const { accessToken } = req as AuthenticatedRequest;
-      const page = parseInt(String(req.query.page ?? '0'), 10);
 
-      const result = await messageService.getForRide(req.params.id, accessToken, page);
+      const query = parseQuery(messagesQuerySchema, req.query, next);
+      if (!query) return;
+
+      const result = await messageService.getForRide(req.params.id, accessToken, query.page);
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -364,22 +318,14 @@ router.post(
   strictLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!validateId(req.params.id, next)) return;
       const { user, accessToken } = req as AuthenticatedRequest;
 
-      const parsed = sendMessageSchema.safeParse(req.body);
-      if (!parsed.success) {
-        res.status(400).json({
-          error: 'Validation Error',
-          details: parsed.error.flatten().fieldErrors,
-        });
-        return;
-      }
+      const body = parseBody(sendMessageSchema, req.body, next);
+      if (!body) return;
 
       const message = await messageService.send(
-        req.params.id,
-        user.id,
-        parsed.data.body,
-        accessToken
+        req.params.id, user.id, body.body, accessToken
       );
 
       auditService.logEvent({

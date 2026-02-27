@@ -1,20 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { z } from 'zod';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { createUserClient } from '../lib/supabase';
 import { profileService } from '../services/profileService';
+import { createError, parseBody } from '../middleware/errorHandler';
+import { profileUpdateSchema, uuidParam } from '../lib/schemas';
 
 const router = Router();
-
-// ── Validation schema ────────────────────────────────────────────────
-
-const updateProfileSchema = z.object({
-  full_name: z.string().min(2).max(100).optional(),
-  phone: z.string().min(7).max(20).optional(),
-  avatar_url: z.string().url().optional(),
-  is_driver: z.boolean().optional(),
-  vehicle_info: z.string().max(200).optional(),
-});
 
 // ── Routes ────────────────────────────────────────────────────────────
 
@@ -42,21 +33,21 @@ router.get('/me', requireAuth, async (req: Request, res: Response, next: NextFun
 
 /**
  * GET /users/:id
- * Returns a public profile for any authenticated user to view.
- * Email is stripped from the public response.
+ * Returns a public profile. Email stripped.
  */
 router.get('/users/:id', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (!uuidParam.safeParse(req.params.id).success) {
+      return next(createError('Invalid ID — must be a valid UUID.', 400, 'INVALID_ID'));
+    }
     const { accessToken } = req as AuthenticatedRequest;
     const userClient = createUserClient(accessToken);
     const profile = await profileService.getById(req.params.id, userClient);
 
     if (!profile) {
-      res.status(404).json({ error: 'Not Found', message: 'User not found.' });
-      return;
+      return next(createError('User not found.', 404, 'NOT_FOUND'));
     }
 
-    // Strip email from public view
     const { email: _email, ...publicProfile } = profile;
     res.status(200).json(publicProfile);
   } catch (err) {
@@ -67,32 +58,20 @@ router.get('/users/:id', requireAuth, async (req: Request, res: Response, next: 
 /**
  * PATCH /me
  * Update the authenticated user's own profile.
- * RLS on the DB ensures only the user's own row can be updated.
  */
 router.patch('/me', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { user, accessToken } = req as AuthenticatedRequest;
 
-    const parsed = updateProfileSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({
-        error: 'Validation Error',
-        message: 'Invalid request body.',
-        details: parsed.error.flatten().fieldErrors,
-      });
-      return;
-    }
+    const body = parseBody(profileUpdateSchema, req.body, next);
+    if (!body) return;
 
-    if (Object.keys(parsed.data).length === 0) {
-      res.status(400).json({
-        error: 'Validation Error',
-        message: 'No valid fields provided for update.',
-      });
-      return;
+    if (Object.keys(body).length === 0) {
+      return next(createError('No valid fields provided for update.', 400, 'EMPTY_UPDATE'));
     }
 
     const userClient = createUserClient(accessToken);
-    const updated = await profileService.updateOwn(user.id, parsed.data, userClient);
+    const updated = await profileService.updateOwn(user.id, body, userClient);
     res.status(200).json(updated);
   } catch (err) {
     next(err);

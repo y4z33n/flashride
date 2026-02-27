@@ -85,7 +85,7 @@ export interface AuditEvent {
 }
 
 export type AuditAction =
-  | 'ride.created'   | 'ride.cancelled'  | 'ride.completed'
+  | 'ride.created'   | 'ride.started'    | 'ride.cancelled'  | 'ride.completed'
   | 'request.created'| 'request.accepted'| 'request.rejected' | 'request.cancelled'
   | 'user.blocked'   | 'user.unblocked'
   | 'report.created' | 'report.status_changed'

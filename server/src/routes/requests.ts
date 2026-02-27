@@ -1,20 +1,23 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { z } from 'zod';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { strictLimiter } from '../middleware/rateLimiter';
 import { rideRequestService } from '../services/rideRequestService';
 import { auditService } from '../services/auditService';
 import { pushService } from '../services/pushService';
 import { supabaseAdmin } from '../lib/supabase';
-import { createError } from '../middleware/errorHandler';
+import { createError, parseBody } from '../middleware/errorHandler';
+import { claimSeatSchema, uuidParam } from '../lib/schemas';
 
 const router = Router();
 
-// ── Validation schemas ────────────────────────────────────────────────
-
-const claimSeatSchema = z.object({
-  seats: z.number().int().min(1).max(4).default(1),
-});
+/** Validate a UUID path param — returns false and calls next(400) if invalid. */
+function validateId(id: string, next: NextFunction): boolean {
+  if (!uuidParam.safeParse(id).success) {
+    next(createError('Invalid ID — must be a valid UUID.', 400, 'INVALID_ID'));
+    return false;
+  }
+  return true;
+}
 
 // ── Routes ────────────────────────────────────────────────────────────
 
@@ -29,18 +32,17 @@ router.post(
   strictLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!validateId(req.params.id, next)) return;
       const { user } = req as AuthenticatedRequest;
       const rideId = req.params.id;
 
-      const parsed = claimSeatSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return next(createError('Invalid request body.', 400, 'VALIDATION_ERROR'));
-      }
+      const body = parseBody(claimSeatSchema, req.body, next);
+      if (!body) return;
 
       const result = await rideRequestService.claimSeat(
         rideId,
         user.id,
-        parsed.data.seats
+        body.seats
       );
 
       if (!result.success) {
@@ -61,7 +63,7 @@ router.post(
         action: 'request.created',
         entityType: 'request',
         entityId: result.request_id,
-        metadata: { ride_id: rideId, seats: parsed.data.seats },
+        metadata: { ride_id: rideId, seats: body.seats },
         ipAddress: req.ip,
       });
 
@@ -109,6 +111,7 @@ router.post(
   strictLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!validateId(req.params.id, next)) return;
       const { user } = req as AuthenticatedRequest;
       const requestId = req.params.id;
 
@@ -165,6 +168,7 @@ router.post(
   strictLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!validateId(req.params.id, next)) return;
       const { user } = req as AuthenticatedRequest;
       const requestId = req.params.id;
 
@@ -213,6 +217,7 @@ router.post(
   strictLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!validateId(req.params.id, next)) return;
       const { user } = req as AuthenticatedRequest;
       const requestId = req.params.id;
 
