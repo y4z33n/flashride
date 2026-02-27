@@ -1,0 +1,49 @@
+# render.yaml — FlashRide backend service definition
+# Commit this file to your repo root.
+# Render reads it automatically when you connect your GitHub repo.
+#
+# Docs: https://render.com/docs/render-yaml-spec
+
+services:
+  - type: web
+    name: flashride-api
+    runtime: docker
+    # Path to Dockerfile, relative to repo root
+    dockerfilePath: ./server/Dockerfile
+    # Build context — the server/ folder
+    dockerContext: ./server
+    # Render's free tier uses Oregon; change to frankfurt for EU users
+    region: oregon
+    plan: free
+
+    # Render sets PORT automatically — our server reads process.env.PORT
+    # Do NOT set PORT here; Render injects it.
+
+    # Health check — Render marks the deploy healthy only after this passes
+    healthCheckPath: /health
+
+    # Auto-deploy on every push to main
+    autoDeploy: true
+    branch: main
+
+    # ── Environment variables ──────────────────────────────────────────
+    # Set these in the Render dashboard under Environment:
+    # Dashboard → flashride-api → Environment
+    #
+    # DO NOT put real secret values here — this file is committed to git.
+    # Use Render's "Secret Files" or Environment variable UI instead.
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      - key: SUPABASE_URL
+        sync: false   # Render will prompt you to set this in the dashboard
+
+      - key: SUPABASE_ANON_KEY
+        sync: false
+
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      - key: CORS_ORIGINS
+        sync: false   # Set to your Vercel frontend URL after Step 8
