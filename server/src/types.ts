@@ -71,6 +71,19 @@ export interface LocationUpdate {
   created_at: string;
 }
 
+// ── Ratings ───────────────────────────────────────────────────────────
+
+export interface Rating {
+  id: string;
+  ride_id: string;
+  rater_id: string;
+  rated_id: string;
+  score: number;
+  comment: string | null;
+  created_at: string;
+  rater?: Profile;
+}
+
 // ── Audit ─────────────────────────────────────────────────────────────
 
 export interface AuditEvent {
@@ -89,10 +102,11 @@ export type AuditAction =
   | 'request.created'| 'request.accepted'| 'request.rejected' | 'request.cancelled'
   | 'user.blocked'   | 'user.unblocked'
   | 'report.created' | 'report.status_changed'
+  | 'rating.submitted'
   | 'message.sent'
   | 'admin.login';
 
-export type AuditEntityType = 'ride' | 'request' | 'user' | 'report' | 'message' | 'session';
+export type AuditEntityType = 'ride' | 'request' | 'user' | 'report' | 'message' | 'session' | 'rating';
 
 // ── Reports ───────────────────────────────────────────────────────────
 

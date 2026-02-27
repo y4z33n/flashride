@@ -69,3 +69,20 @@ export const locationSchema = z.object({
 export const messagesQuerySchema = z.object({
   page: pageQuery,
 });
+
+/** Submit rating body schema. */
+export const submitRatingSchema = z.object({
+  rated_id: z.string().uuid({ message: 'rated_id must be a valid UUID.' }),
+  score:    z.number().int().min(1, { message: 'score must be at least 1.' }).max(5, { message: 'score cannot exceed 5.' }),
+  comment:  z.string().max(500).nullable().optional(),
+});
+
+/** Submit report body schema. */
+export const submitReportSchema = z.object({
+  reason:      z.enum(
+    ['unsafe_driving', 'harassment', 'no_show', 'fraud', 'inappropriate_content', 'other'],
+    { errorMap: () => ({ message: 'reason must be one of: unsafe_driving, harassment, no_show, fraud, inappropriate_content, other.' }) }
+  ),
+  description: z.string().max(1000).nullable().optional(),
+  ride_id:     z.string().uuid().nullable().optional(),
+});

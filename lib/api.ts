@@ -194,26 +194,37 @@ export const profileService = {
   },
 };
 
-// ── Ratings ────────────────────────────────────────────────────────────
-// Ratings are still read/written directly via Supabase (no server endpoint yet — Step 10)
+// ── Reports ────────────────────────────────────────────────────────────
+
+export const reportService = {
+  submit: async (
+    reportedUserId: string,
+    reason: 'unsafe_driving' | 'harassment' | 'no_show' | 'fraud' | 'inappropriate_content' | 'other',
+    description?: string | null,
+    rideId?: string | null
+  ) => {
+    const data = await http.post<{ id: string; status: string; message: string }>(
+      `/users/${reportedUserId}/report`,
+      { reason, description, ride_id: rideId }
+    );
+    return { data, error: null };
+  },
+};
 
 export const ratingService = {
-  submit: async (rating: Pick<Rating, 'ride_id' | 'rater_id' | 'rated_id' | 'score' | 'comment'>) => {
-    const { data, error } = await supabase
-      .from('ratings')
-      .insert(rating)
-      .select()
-      .single();
-    return { data, error };
+  submit: async (rideId: string, ratedId: string, score: number, comment?: string | null) => {
+    const data = await http.post<Rating>(`/rides/${rideId}/rate`, { rated_id: ratedId, score, comment });
+    return { data, error: null };
   },
 
   getForUser: async (userId: string) => {
-    const { data, error } = await supabase
-      .from('ratings')
-      .select('*, rater:profiles!rater_id(*)')
-      .eq('rated_id', userId)
-      .order('created_at', { ascending: false });
-    return { data, error };
+    const data = await http.get<Rating[]>(`/users/${userId}/ratings`);
+    return { data, error: null };
+  },
+
+  getForRide: async (rideId: string) => {
+    const data = await http.get<Rating[]>(`/rides/${rideId}/ratings`);
+    return { data, error: null };
   },
 };
 

@@ -219,18 +219,21 @@ export default function RideDetailScreen() {
     if (!ratingModal) return;
     setRatingSubmitting(true);
     try {
-      const { error } = await ratingService.submit({
-        ride_id: ride.id,
-        rater_id: session!.user.id,
-        rated_id: ratingModal.userId,
-        score: ratingScore,
-        comment: ratingComment.trim() || undefined,
-      });
-      if (error && !error.message.includes("duplicate")) throw error;
+      await ratingService.submit(
+        ride.id,
+        ratingModal.userId,
+        ratingScore,
+        ratingComment.trim() || null
+      );
       // Mark this user as rated so the button disables immediately
       setRatedUserIds(prev => new Set([...prev, ratingModal.userId]));
     } catch (err: any) {
-      Alert.alert("Error", err.message);
+      // ALREADY_RATED is a soft error — just silently mark as rated
+      if (err?.code === 'ALREADY_RATED') {
+        setRatedUserIds(prev => new Set([...prev, ratingModal.userId]));
+      } else {
+        Alert.alert("Error", err.message);
+      }
     } finally {
       setRatingSubmitting(false);
       setRatingModal(null);
