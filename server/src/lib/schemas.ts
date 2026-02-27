@@ -86,3 +86,25 @@ export const submitReportSchema = z.object({
   description: z.string().max(1000).nullable().optional(),
   ride_id:     z.string().uuid().nullable().optional(),
 });
+
+// ── Admin schemas ──────────────────────────────────────────────────────
+
+/** Update report status body. */
+export const updateReportStatusSchema = z.object({
+  status: z.enum(['open', 'in_review', 'resolved', 'dismissed'], {
+    errorMap: () => ({ message: 'status must be one of: open, in_review, resolved, dismissed.' }),
+  }),
+});
+
+/** Block user body. */
+export const blockUserSchema = z.object({
+  reason: z.string().max(500).nullable().optional(),
+});
+
+/** Admin list query (page + optional filter). */
+export const adminListQuerySchema = z.object({
+  page:   pageQuery,
+  status: z.string().optional(),
+  search: z.string().max(100).optional(),
+  action: z.string().optional(),
+});

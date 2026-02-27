@@ -29,11 +29,15 @@ export const config = {
     isProd: optional('NODE_ENV', 'development') === 'production',
   },
   cors: {
-    // Split comma-separated origins into an array
     origins: optional('CORS_ORIGINS', 'http://localhost:8081,http://localhost:3000')
       .split(',')
       .map((o) => o.trim())
       .filter(Boolean),
+  },
+  admin: {
+    // A static secret shared between the admin CLI/dashboard and this server.
+    // Set a long random value in production: openssl rand -hex 32
+    secret: optional('ADMIN_SECRET', ''),
   },
   app: {
     version: optional('APP_VERSION', '1.0.0'),

@@ -12,6 +12,7 @@ import usersRouter from './routes/users';
 import requestsRouter from './routes/requests';
 import ridesRouter from './routes/rides';
 import ratingsRouter from './routes/ratings';
+import adminRouter from './routes/admin';
 
 export function createApp() {
   const app = express();
@@ -65,6 +66,7 @@ export function createApp() {
   app.use('/', ridesRouter);
   app.use('/', requestsRouter);
   app.use('/', ratingsRouter);
+  app.use('/', adminRouter);
 
   // ── 404 handler ───────────────────────────────────────────────────────
   app.use((_req: express.Request, res: express.Response) => {
