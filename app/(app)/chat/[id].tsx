@@ -127,7 +127,7 @@ export default function ChatScreen() {
     scrollToBottom();
 
     try {
-      const { data, error } = await messageService.send(rideId!, session!.user.id, body);
+      const { data, error } = await messageService.send(rideId!, body);
       if (error) throw error;
       // Replace optimistic with real message
       setMessages(prev => prev.map(m => m.id === optimistic.id ? { ...data, sender: profile as any } : m));

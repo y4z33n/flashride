@@ -81,7 +81,6 @@ export default function OfferRideScreen() {
       ].filter(Boolean).join("\n");
 
       const { data, error } = await rideService.create({
-        driver_id: session!.user.id,
         origin_address: origin.trim(),
         origin_lat: oc.lat,
         origin_lng: oc.lng,
@@ -90,10 +89,8 @@ export default function OfferRideScreen() {
         destination_lng: dc.lng,
         departure_time: departure.toISOString(),
         seats_total: parseInt(seats, 10),
-        seats_available: parseInt(seats, 10),
         price_per_seat: price ? parseFloat(price) : undefined,
         notes: combinedNotes || undefined,
-        status: "open",
       });
       if (error) throw error;
       setCurrentRide(data);

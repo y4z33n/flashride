@@ -131,14 +131,9 @@ export default function RideDetailScreen() {
   const handleRequest = async () => {
     setActionLoading("request");
     try {
-      const { data, error } = await requestService.create({
-        ride_id: ride.id,
-        rider_id: session!.user.id,
-        seats_requested: 1,
-        message: "",
-      });
+      const { data, error } = await requestService.create(ride.id, 1);
       if (error) throw error;
-      setMyRequest(data);
+      setMyRequest(data as any);
       // Notify the driver
       await sendPushNotification(
         ride.driver_id,
@@ -156,8 +151,13 @@ export default function RideDetailScreen() {
   const handleUpdateRequest = async (requestId: string, status: string) => {
     setActionLoading(requestId + status);
     try {
-      const { error } = await requestService.updateStatus(requestId, status as any);
-      if (error) throw error;
+      if (status === "accepted") {
+        const { error } = await requestService.accept(requestId);
+        if (error) throw error;
+      } else if (status === "rejected") {
+        const { error } = await requestService.reject(requestId);
+        if (error) throw error;
+      }
       // Notify the rider
       const req = requests.find(r => r.id === requestId);
       if (req) {
@@ -225,9 +225,10 @@ export default function RideDetailScreen() {
       {
         text: "Complete",
         onPress: async () => {
-          const { error } = await rideService.updateStatus(ride.id, "completed");
-          if (error) { Alert.alert("Error", error.message); return; }
-          await loadRide();
+          try {
+            await rideService.complete(ride.id);
+            await loadRide();
+          } catch (err: any) { Alert.alert("Error", err.message); }
         },
       },
     ]);
@@ -263,9 +264,10 @@ export default function RideDetailScreen() {
       {
         text: "Yes, Cancel", style: "destructive",
         onPress: async () => {
-          const { error } = await rideService.updateStatus(ride.id, "cancelled");
-          if (!error) router.back();
-          else Alert.alert("Error", error.message);
+          try {
+            await rideService.cancel(ride.id);
+            router.back();
+          } catch (err: any) { Alert.alert("Error", err.message); }
         },
       },
     ]);
@@ -491,9 +493,10 @@ export default function RideDetailScreen() {
                       {
                         text: "Yes, Cancel", style: "destructive",
                         onPress: async () => {
-                          const { error } = await requestService.updateStatus(myRequest.id, "cancelled");
-                          if (error) Alert.alert("Error", error.message);
-                          else setMyRequest((prev: any) => prev ? { ...prev, status: "cancelled" } : null);
+                          try {
+                            await requestService.cancel(myRequest.id);
+                            setMyRequest((prev: any) => prev ? { ...prev, status: "cancelled" } : null);
+                          } catch (err: any) { Alert.alert("Error", err.message); }
                         },
                       },
                     ]);
