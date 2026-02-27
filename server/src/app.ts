@@ -1,11 +1,11 @@
-import express from 'express';
+﻿import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { config } from './config';
 import { requestId } from './middleware/requestId';
 import { requestLogger } from './middleware/logger';
 import { metricsMiddleware } from './middleware/metrics';
-import { generalLimiter, strictLimiter } from './middleware/rateLimiter';
+import { generalLimiter, strictLimiter, authLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
 import healthRouter from './routes/health';
 import usersRouter from './routes/users';
@@ -17,8 +17,24 @@ import adminRouter from './routes/admin';
 export function createApp() {
   const app = express();
 
-  // ── Security headers ─────────────────────────────────────────────────
-  app.use(helmet());
+  // ── Security headers ──────────────────────────────────────────────────
+  // helmet() sets safe defaults; we override a few for a JSON-only API.
+  app.use(
+    helmet({
+      // API serves JSON only — no browser rendering, so no CSP needed
+      contentSecurityPolicy: false,
+      // Force HTTPS for 1 year (Render provides TLS termination)
+      hsts: { maxAge: 31_536_000, includeSubDomains: true, preload: true },
+      // Prevent MIME sniffing
+      noSniff: true,
+      // X-Frame-Options not needed for a pure JSON API
+      frameguard: false,
+      // Referrer leakage is irrelevant for a JSON API
+      referrerPolicy: { policy: 'no-referrer' },
+    })
+  );
+  // Belt-and-suspenders: hide the framework identifier
+  app.disable('x-powered-by');
 
   // ── CORS ──────────────────────────────────────────────────────────────
   app.use(
@@ -36,7 +52,7 @@ export function createApp() {
     })
   );
 
-  // ── Request ID (before logger so it appears in logs) ─────────────────
+  // ── Request ID (before logger so it appears in every log line) ────────
   app.use(requestId);
 
   // ── Request logging ───────────────────────────────────────────────────
@@ -50,9 +66,11 @@ export function createApp() {
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
   // ── Rate limiting ─────────────────────────────────────────────────────
-  // General: all routes
+  // General: every route
   app.use(generalLimiter);
-  // Strict: write endpoints (POST/PATCH/PUT/DELETE)
+  // Auth: brute-force protection on auth-adjacent paths
+  app.use('/auth', authLimiter);
+  // Strict: all write methods
   app.use((req, res, next) => {
     if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) {
       return strictLimiter(req, res, next);
